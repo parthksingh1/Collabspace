@@ -1,0 +1,244 @@
+name: Deploy to Production
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "20"
+  REGISTRY: gcr.io
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  CLUSTER_NAME: collabspace-cluster
+  CLUSTER_REGION: us-central1
+
+jobs:
+  # ─────────────────────────── Build Release Images ───────────────────────────
+  build:
+    name: Build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - service: api-gateway
+            dockerfile: infra/docker/Dockerfile.service
+            build_args: SERVICE_NAME=api-gateway
+          - service: ws-gateway
+            dockerfile: infra/docker/Dockerfile.service
+            build_args: SERVICE_NAME=ws-gateway
+          - service: auth-service
+            dockerfile: infra/docker/Dockerfile.service
+            build_args: SERVICE_NAME=auth-service
+          - service: doc-service
+            dockerfile: infra/docker/Dockerfile.service
+            build_args: SERVICE_NAME=doc-service
+          - service: code-service
+            dockerfile: infra/docker/Dockerfile.service
+            build_args: SERVICE_NAME=code-service
+          - service: board-service
+            dockerfile: infra/docker/Dockerfile.service
+            build_args: SERVICE_NAME=board-service
+          - service: project-service
+            dockerfile: infra/docker/Dockerfile.service
+            build_args: SERVICE_NAME=project-service
+          - service: notification-service
+            dockerfile: infra/docker/Dockerfile.service
+            build_args: SERVICE_NAME=notification-service
+          - service: ai-service
+            dockerfile: infra/docker/Dockerfile.service
+            build_args: SERVICE_NAME=ai-service
+          - service: web
+            dockerfile: infra/docker/Dockerfile.web
+            build_args: ""
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker gcr.io --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          build-args: ${{ matrix.build_args }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ matrix.service }}:${{ steps.version.outputs.VERSION }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ matrix.service }}:production
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─────────────────────────── Deploy to Production ───────────────────────────
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build]
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.CLUSTER_NAME }}
+          location: ${{ env.CLUSTER_REGION }}
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Record deployment start
+        id: deploy_start
+        run: echo "TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+
+      - name: Save current state for rollback
+        run: |
+          kubectl get deployments -n collabspace -o yaml > /tmp/current-state.yaml
+
+      - name: Update image tags for production
+        working-directory: infra/k8s/overlays/production
+        run: |
+          SERVICES="api-gateway ws-gateway auth-service doc-service code-service board-service project-service notification-service ai-service web"
+          for svc in $SERVICES; do
+            kustomize edit set image gcr.io/collabspace/${svc}=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${svc}:${{ steps.version.outputs.VERSION }}
+          done
+
+      - name: Deploy to production
+        id: deploy
+        run: |
+          kustomize build infra/k8s/overlays/production | kubectl apply -f -
+
+      - name: Wait for rollout
+        id: rollout
+        run: |
+          DEPLOYMENTS="api-gateway ws-gateway auth-service doc-service code-service board-service project-service notification-service ai-service web"
+          FAILED=0
+          for deploy in $DEPLOYMENTS; do
+            echo "Waiting for ${deploy} rollout..."
+            if ! kubectl rollout status deployment/${deploy} -n collabspace --timeout=600s; then
+              echo "FAILED: ${deploy}"
+              FAILED=1
+            fi
+          done
+          if [ $FAILED -eq 1 ]; then
+            echo "ROLLOUT_FAILED=true" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "ROLLOUT_FAILED=false" >> $GITHUB_OUTPUT
+
+      - name: Run smoke tests
+        id: smoke
+        if: steps.rollout.outputs.ROLLOUT_FAILED != 'true'
+        run: |
+          echo "Running production smoke tests..."
+          DOMAIN="collabspace.io"
+
+          # Test web
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}/")
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Web health check failed: HTTP $HTTP_CODE"
+            echo "SMOKE_FAILED=true" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          # Test API health
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}/api/health")
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "API health check failed: HTTP $HTTP_CODE"
+            echo "SMOKE_FAILED=true" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          # Test auth endpoint
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}/api/auth/health")
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Auth service health check failed: HTTP $HTTP_CODE"
+            echo "SMOKE_FAILED=true" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          echo "All smoke tests passed"
+          echo "SMOKE_FAILED=false" >> $GITHUB_OUTPUT
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Deployment failed - initiating rollback..."
+          DEPLOYMENTS="api-gateway ws-gateway auth-service doc-service code-service board-service project-service notification-service ai-service web"
+          for deploy in $DEPLOYMENTS; do
+            echo "Rolling back ${deploy}..."
+            kubectl rollout undo deployment/${deploy} -n collabspace || true
+          done
+
+          # Wait for rollback to complete
+          for deploy in $DEPLOYMENTS; do
+            kubectl rollout status deployment/${deploy} -n collabspace --timeout=300s || true
+          done
+
+          echo "Rollback completed"
+
+      - name: Annotate deployment in Grafana
+        if: success()
+        run: |
+          curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_KEY }}" \
+            -d '{
+              "text": "Deployed ${{ steps.version.outputs.VERSION }}",
+              "tags": ["deployment", "production"],
+              "time": ${{ steps.deploy_start.outputs.TIMESTAMP }}
+            }' \
+            "https://grafana.collabspace.io/api/annotations" || true
+
+      - name: Create GitHub deployment status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ job.status }}' === 'success' ? 'success' : 'failure';
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: context.payload.deployment?.id || 0,
+              state: status,
+              description: `Production deployment ${status}`,
+              environment: 'production',
+            }).catch(() => {});

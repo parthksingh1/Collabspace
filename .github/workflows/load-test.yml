@@ -1,0 +1,161 @@
+name: Load Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "Target URL for load testing"
+        required: true
+        default: "https://staging.collabspace.io"
+        type: string
+      duration:
+        description: "Test duration (e.g., 5m, 10m)"
+        required: true
+        default: "5m"
+        type: string
+      vus:
+        description: "Max virtual users"
+        required: true
+        default: "1000"
+        type: string
+      scenario:
+        description: "Scenario to run (all, api, websocket, collaboration, ai)"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - api
+          - websocket
+          - collaboration
+          - ai
+
+concurrency:
+  group: load-test
+  cancel-in-progress: false
+
+jobs:
+  load-test:
+    name: Run k6 Load Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Run load tests
+        run: |
+          k6 run tests/load/scenarios.js \
+            --env BASE_URL=${{ inputs.target_url }} \
+            --env MAX_VUS=${{ inputs.vus }} \
+            --env DURATION=${{ inputs.duration }} \
+            --env SCENARIO=${{ inputs.scenario }} \
+            --out json=results.json \
+            --summary-export=summary.json
+        continue-on-error: true
+
+      - name: Parse results
+        id: results
+        if: always()
+        run: |
+          if [ -f summary.json ]; then
+            P95=$(cat summary.json | jq -r '.metrics.http_req_duration.values["p(95)"] // "N/A"')
+            P99=$(cat summary.json | jq -r '.metrics.http_req_duration.values["p(99)"] // "N/A"')
+            AVG=$(cat summary.json | jq -r '.metrics.http_req_duration.values.avg // "N/A"')
+            ERROR_RATE=$(cat summary.json | jq -r '.metrics.http_req_failed.values.rate // "N/A"')
+            REQS=$(cat summary.json | jq -r '.metrics.http_reqs.values.count // "N/A"')
+            RPS=$(cat summary.json | jq -r '.metrics.http_reqs.values.rate // "N/A"')
+            WS_SESSIONS=$(cat summary.json | jq -r '.metrics.ws_sessions.values.count // "N/A"')
+
+            echo "P95=${P95}" >> $GITHUB_OUTPUT
+            echo "P99=${P99}" >> $GITHUB_OUTPUT
+            echo "AVG=${AVG}" >> $GITHUB_OUTPUT
+            echo "ERROR_RATE=${ERROR_RATE}" >> $GITHUB_OUTPUT
+            echo "REQS=${REQS}" >> $GITHUB_OUTPUT
+            echo "RPS=${RPS}" >> $GITHUB_OUTPUT
+            echo "WS_SESSIONS=${WS_SESSIONS}" >> $GITHUB_OUTPUT
+
+            # Check thresholds
+            PASSED="true"
+            if [ "$(echo "$P95 > 200" | bc -l 2>/dev/null || echo 0)" = "1" ]; then
+              PASSED="false"
+            fi
+            if [ "$(echo "$ERROR_RATE > 0.01" | bc -l 2>/dev/null || echo 0)" = "1" ]; then
+              PASSED="false"
+            fi
+            echo "PASSED=${PASSED}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-results
+          path: |
+            results.json
+            summary.json
+          retention-days: 30
+
+      - name: Comment on PR (if triggered from PR)
+        if: github.event.pull_request
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `## Load Test Results
+
+            | Metric | Value |
+            |--------|-------|
+            | Target URL | \`${{ inputs.target_url }}\` |
+            | Scenario | ${{ inputs.scenario }} |
+            | Duration | ${{ inputs.duration }} |
+            | Max VUs | ${{ inputs.vus }} |
+            | Total Requests | ${{ steps.results.outputs.REQS }} |
+            | Requests/sec | ${{ steps.results.outputs.RPS }} |
+            | Avg Latency | ${{ steps.results.outputs.AVG }}ms |
+            | P95 Latency | ${{ steps.results.outputs.P95 }}ms |
+            | P99 Latency | ${{ steps.results.outputs.P99 }}ms |
+            | Error Rate | ${{ steps.results.outputs.ERROR_RATE }} |
+            | WS Sessions | ${{ steps.results.outputs.WS_SESSIONS }} |
+            | **Thresholds** | **${{ steps.results.outputs.PASSED == 'true' && 'PASSED' || 'FAILED' }}** |
+
+            ### Thresholds
+            - P95 latency < 200ms: ${{ steps.results.outputs.PASSED == 'true' && 'PASS' || 'FAIL' }}
+            - Error rate < 1%: ${{ steps.results.outputs.PASSED == 'true' && 'PASS' || 'FAIL' }}
+            `;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body,
+            });
+
+      - name: Post results to Slack
+        if: always()
+        run: |
+          STATUS="${{ steps.results.outputs.PASSED == 'true' && 'PASSED' || 'FAILED' }}"
+          COLOR="${{ steps.results.outputs.PASSED == 'true' && '#36a64f' || '#ff0000' }}"
+
+          curl -s -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"attachments\": [{
+                \"color\": \"${COLOR}\",
+                \"title\": \"Load Test Results - ${STATUS}\",
+                \"fields\": [
+                  {\"title\": \"Target\", \"value\": \"${{ inputs.target_url }}\", \"short\": true},
+                  {\"title\": \"Scenario\", \"value\": \"${{ inputs.scenario }}\", \"short\": true},
+                  {\"title\": \"P95 Latency\", \"value\": \"${{ steps.results.outputs.P95 }}ms\", \"short\": true},
+                  {\"title\": \"Error Rate\", \"value\": \"${{ steps.results.outputs.ERROR_RATE }}\", \"short\": true},
+                  {\"title\": \"RPS\", \"value\": \"${{ steps.results.outputs.RPS }}\", \"short\": true},
+                  {\"title\": \"VUs\", \"value\": \"${{ inputs.vus }}\", \"short\": true}
+                ]
+              }]
+            }" || true
