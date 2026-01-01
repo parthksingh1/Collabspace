@@ -1,0 +1,32 @@
+{
+  "name": "@collabspace/auth-service",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "jsonwebtoken": "^9.0.0",
+    "bcryptjs": "^2.4.0",
+    "zod": "^3.22.0",
+    "helmet": "^7.1.0",
+    "cors": "^2.8.0",
+    "ioredis": "^5.3.0",
+    "pg": "^8.11.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "nanoid": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/pg": "^8.10.9",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}
