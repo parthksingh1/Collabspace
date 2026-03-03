@@ -1,0 +1,129 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    cluster: collabspace
+    environment: production
+
+rule_files:
+  - /etc/prometheus/alert_rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+scrape_configs:
+  # ─────────────────────── Prometheus Self-Monitoring ─────────────────────────
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
+    metrics_path: /metrics
+
+  # ─────────────────────── Application Services ──────────────────────────────
+  - job_name: api-gateway
+    static_configs:
+      - targets:
+          - api-gateway:4000
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  - job_name: ws-gateway
+    static_configs:
+      - targets:
+          - ws-gateway:4001
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  - job_name: auth-service
+    static_configs:
+      - targets:
+          - auth-service:4002
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  - job_name: doc-service
+    static_configs:
+      - targets:
+          - doc-service:4003
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  - job_name: code-service
+    static_configs:
+      - targets:
+          - code-service:4004
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  - job_name: board-service
+    static_configs:
+      - targets:
+          - board-service:4005
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  - job_name: project-service
+    static_configs:
+      - targets:
+          - project-service:4006
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  - job_name: notification-service
+    static_configs:
+      - targets:
+          - notification-service:4007
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  - job_name: ai-service
+    static_configs:
+      - targets:
+          - ai-service:4008
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # ─────────────────────── Infrastructure ─────────────────────────────────────
+  - job_name: redis
+    static_configs:
+      - targets:
+          - redis-exporter:9121
+    metrics_path: /metrics
+
+  - job_name: postgres
+    static_configs:
+      - targets:
+          - postgres-exporter:9187
+    metrics_path: /metrics
+
+  - job_name: kafka
+    static_configs:
+      - targets:
+          - kafka-exporter:9308
+    metrics_path: /metrics
+
+  - job_name: nginx
+    static_configs:
+      - targets:
+          - nginx-exporter:9113
+    metrics_path: /metrics
+
+  # ─────────────────────── Node / Container Metrics ───────────────────────────
+  - job_name: node-exporter
+    static_configs:
+      - targets:
+          - node-exporter:9100
+    metrics_path: /metrics
+
+  - job_name: cadvisor
+    static_configs:
+      - targets:
+          - cadvisor:8080
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # ─────────────────────── Alert Rules (inline) ───────────────────────────────
+  # These are also referenced via rule_files above for separate file management
