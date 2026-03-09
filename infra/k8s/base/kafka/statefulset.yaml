@@ -1,0 +1,352 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-config
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/part-of: collabspace
+data:
+  KAFKA_HEAP_OPTS: "-Xmx1G -Xms1G"
+  KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+  KAFKA_NUM_PARTITIONS: "6"
+  KAFKA_DEFAULT_REPLICATION_FACTOR: "3"
+  KAFKA_MIN_INSYNC_REPLICAS: "2"
+  KAFKA_LOG_RETENTION_HOURS: "168"
+  KAFKA_LOG_RETENTION_BYTES: "10737418240"
+  KAFKA_MESSAGE_MAX_BYTES: "10485760"
+  KAFKA_REPLICA_FETCH_MAX_BYTES: "10485760"
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+---
+# ZooKeeper StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/part-of: collabspace
+    app.kubernetes.io/component: messaging
+spec:
+  serviceName: zookeeper-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zookeeper
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: zookeeper
+        app.kubernetes.io/part-of: collabspace
+        app.kubernetes.io/component: messaging
+    spec:
+      terminationGracePeriodSeconds: 30
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - zookeeper
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: zookeeper
+          image: confluentinc/cp-zookeeper:7.6.0
+          ports:
+            - name: client
+              containerPort: 2181
+            - name: follower
+              containerPort: 2888
+            - name: election
+              containerPort: 3888
+          env:
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "2181"
+            - name: ZOOKEEPER_TICK_TIME
+              value: "2000"
+            - name: ZOOKEEPER_INIT_LIMIT
+              value: "5"
+            - name: ZOOKEEPER_SYNC_LIMIT
+              value: "2"
+            - name: ZOOKEEPER_SERVERS
+              value: "zookeeper-0.zookeeper-headless.collabspace.svc.cluster.local:2888:3888;zookeeper-1.zookeeper-headless.collabspace.svc.cluster.local:2888:3888;zookeeper-2.zookeeper-headless.collabspace.svc.cluster.local:2888:3888"
+          command:
+            - sh
+            - -c
+            - |
+              export ZOOKEEPER_SERVER_ID=$((${HOSTNAME##*-}+1))
+              exec /etc/confluent/docker/run
+          volumeMounts:
+            - name: zk-data
+              mountPath: /var/lib/zookeeper/data
+            - name: zk-logs
+              mountPath: /var/lib/zookeeper/log
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 250m
+            limits:
+              memory: 1Gi
+              cpu: 500m
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - echo ruok | nc localhost 2181 | grep imok
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - echo ruok | nc localhost 2181 | grep imok
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: zk-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 10Gi
+    - metadata:
+        name: zk-logs
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-headless
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/part-of: collabspace
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: client
+      port: 2181
+      targetPort: client
+    - name: follower
+      port: 2888
+      targetPort: follower
+    - name: election
+      port: 3888
+      targetPort: election
+  selector:
+    app.kubernetes.io/name: zookeeper
+---
+# Kafka StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/part-of: collabspace
+    app.kubernetes.io/component: messaging
+spec:
+  serviceName: kafka-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka
+        app.kubernetes.io/part-of: collabspace
+        app.kubernetes.io/component: messaging
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9308"
+    spec:
+      terminationGracePeriodSeconds: 60
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - kafka
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: kafka
+          image: confluentinc/cp-kafka:7.6.0
+          ports:
+            - name: kafka
+              containerPort: 9092
+          env:
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: "zookeeper-0.zookeeper-headless.collabspace.svc.cluster.local:2181,zookeeper-1.zookeeper-headless.collabspace.svc.cluster.local:2181,zookeeper-2.zookeeper-headless.collabspace.svc.cluster.local:2181"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: PLAINTEXT:PLAINTEXT
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: PLAINTEXT
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+            - name: KAFKA_NUM_PARTITIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: KAFKA_NUM_PARTITIONS
+            - name: KAFKA_DEFAULT_REPLICATION_FACTOR
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: KAFKA_DEFAULT_REPLICATION_FACTOR
+            - name: KAFKA_MIN_INSYNC_REPLICAS
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: KAFKA_MIN_INSYNC_REPLICAS
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+            - name: KAFKA_LOG_RETENTION_HOURS
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: KAFKA_LOG_RETENTION_HOURS
+            - name: KAFKA_HEAP_OPTS
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: KAFKA_HEAP_OPTS
+          command:
+            - sh
+            - -c
+            - |
+              export KAFKA_BROKER_ID=$((${HOSTNAME##*-}))
+              export KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://${HOSTNAME}.kafka-headless.collabspace.svc.cluster.local:9092
+              exec /etc/confluent/docker/run
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: 500m
+            limits:
+              memory: 2Gi
+              cpu: 1000m
+          livenessProbe:
+            exec:
+              command:
+                - kafka-topics
+                - --bootstrap-server
+                - localhost:9092
+                - --list
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - kafka-topics
+                - --bootstrap-server
+                - localhost:9092
+                - --list
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 3
+        - name: kafka-exporter
+          image: danielqsj/kafka-exporter:v1.7.0
+          args:
+            - --kafka.server=localhost:9092
+          ports:
+            - name: metrics
+              containerPort: 9308
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 50m
+            limits:
+              memory: 64Mi
+              cpu: 100m
+  volumeClaimTemplates:
+    - metadata:
+        name: kafka-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 50Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-headless
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/part-of: collabspace
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: kafka
+  selector:
+    app.kubernetes.io/name: kafka
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/part-of: collabspace
+spec:
+  type: ClusterIP
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: kafka
+  selector:
+    app.kubernetes.io/name: kafka
