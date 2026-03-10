@@ -1,0 +1,53 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: collabspace
+
+commonLabels:
+  app.kubernetes.io/part-of: collabspace
+  app.kubernetes.io/managed-by: kustomize
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  - ingress.yaml
+  # Application services
+  - api-gateway/deployment.yaml
+  - api-gateway/service.yaml
+  - api-gateway/hpa.yaml
+  - ws-gateway/deployment.yaml
+  - ws-gateway/service.yaml
+  - ws-gateway/hpa.yaml
+  - auth-service/deployment.yaml
+  - auth-service/service.yaml
+  - auth-service/hpa.yaml
+  - doc-service/deployment.yaml
+  - doc-service/service.yaml
+  - doc-service/hpa.yaml
+  - code-service/deployment.yaml
+  - code-service/service.yaml
+  - code-service/hpa.yaml
+  - board-service/deployment.yaml
+  - board-service/service.yaml
+  - board-service/hpa.yaml
+  - project-service/deployment.yaml
+  - project-service/service.yaml
+  - project-service/hpa.yaml
+  - notification-service/deployment.yaml
+  - notification-service/service.yaml
+  - notification-service/hpa.yaml
+  - ai-service/deployment.yaml
+  - ai-service/service.yaml
+  - ai-service/hpa.yaml
+  - web/deployment.yaml
+  - web/service.yaml
+  - web/hpa.yaml
+  # Infrastructure
+  - redis/statefulset.yaml
+  - kafka/statefulset.yaml
+  # Monitoring
+  - monitoring/prometheus.yaml
+  - monitoring/grafana.yaml
+  - monitoring/jaeger.yaml
+  - monitoring/service-monitors.yaml
