@@ -1,0 +1,159 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-gateway
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/part-of: collabspace
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api-gateway
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ws-gateway
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/part-of: collabspace
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ws-gateway
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: auth-service
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/part-of: collabspace
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth-service
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: doc-service
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/part-of: collabspace
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: doc-service
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: code-service
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/part-of: collabspace
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: code-service
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: board-service
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/part-of: collabspace
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: board-service
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: project-service
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/part-of: collabspace
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: project-service
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: notification-service
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/part-of: collabspace
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notification-service
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ai-service
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/part-of: collabspace
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-service
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: web
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/part-of: collabspace
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
