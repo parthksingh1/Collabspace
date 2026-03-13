@@ -1,0 +1,196 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: collabspace
+data:
+  redis.conf: |
+    bind 0.0.0.0
+    port 6379
+    maxmemory 1gb
+    maxmemory-policy allkeys-lru
+    appendonly yes
+    appendfsync everysec
+    save 900 1
+    save 300 10
+    save 60 10000
+    tcp-backlog 511
+    timeout 300
+    tcp-keepalive 60
+    loglevel notice
+    databases 16
+    hz 10
+    dynamic-hz yes
+    aof-use-rdb-preamble yes
+  sentinel.conf: |
+    sentinel monitor collabspace-master redis-0.redis-headless.collabspace.svc.cluster.local 6379 2
+    sentinel down-after-milliseconds collabspace-master 5000
+    sentinel failover-timeout collabspace-master 60000
+    sentinel parallel-syncs collabspace-master 1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: collabspace
+    app.kubernetes.io/component: datastore
+spec:
+  serviceName: redis-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/part-of: collabspace
+        app.kubernetes.io/component: datastore
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
+    spec:
+      terminationGracePeriodSeconds: 30
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - redis
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          command:
+            - redis-server
+            - /etc/redis/redis.conf
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: redis-config
+              mountPath: /etc/redis
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: 500m
+            limits:
+              memory: 2Gi
+              cpu: 1000m
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+        - name: redis-sentinel
+          image: redis:7-alpine
+          ports:
+            - name: sentinel
+              containerPort: 26379
+              protocol: TCP
+          command:
+            - redis-sentinel
+            - /etc/redis/sentinel.conf
+          volumeMounts:
+            - name: redis-config
+              mountPath: /etc/redis
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 100m
+            limits:
+              memory: 128Mi
+              cpu: 200m
+        - name: redis-exporter
+          image: oliver006/redis_exporter:v1.58.0-alpine
+          ports:
+            - name: metrics
+              containerPort: 9121
+              protocol: TCP
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 50m
+            limits:
+              memory: 64Mi
+              cpu: 100m
+      volumes:
+        - name: redis-config
+          configMap:
+            name: redis-config
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: collabspace
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+    - name: sentinel
+      port: 26379
+      targetPort: sentinel
+  selector:
+    app.kubernetes.io/name: redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-headless
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: collabspace
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+    - name: sentinel
+      port: 26379
+      targetPort: sentinel
+  selector:
+    app.kubernetes.io/name: redis
