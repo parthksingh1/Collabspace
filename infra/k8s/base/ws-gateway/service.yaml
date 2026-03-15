@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ws-gateway
+  namespace: collabspace
+  labels:
+    app.kubernetes.io/name: ws-gateway
+    app.kubernetes.io/part-of: collabspace
+    app.kubernetes.io/component: gateway
+  annotations:
+    # Enable sticky sessions for WebSocket connections
+    service.beta.kubernetes.io/aws-load-balancer-stickiness-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-stickiness-type: source_ip
+spec:
+  type: ClusterIP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+  ports:
+    - name: http
+      port: 4001
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: ws-gateway
