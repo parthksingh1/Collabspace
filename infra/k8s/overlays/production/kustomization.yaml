@@ -1,0 +1,155 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: collabspace
+
+bases:
+  - ../../base
+
+commonLabels:
+  environment: production
+
+# Production image tags - set by CI/CD
+images:
+  - name: gcr.io/collabspace/api-gateway
+    newTag: production
+  - name: gcr.io/collabspace/ws-gateway
+    newTag: production
+  - name: gcr.io/collabspace/auth-service
+    newTag: production
+  - name: gcr.io/collabspace/doc-service
+    newTag: production
+  - name: gcr.io/collabspace/code-service
+    newTag: production
+  - name: gcr.io/collabspace/board-service
+    newTag: production
+  - name: gcr.io/collabspace/project-service
+    newTag: production
+  - name: gcr.io/collabspace/notification-service
+    newTag: production
+  - name: gcr.io/collabspace/ai-service
+    newTag: production
+  - name: gcr.io/collabspace/web
+    newTag: production
+
+patches:
+  # Increase replicas for production
+  - target:
+      kind: Deployment
+      name: api-gateway
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 5
+  - target:
+      kind: Deployment
+      name: ws-gateway
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 10
+  - target:
+      kind: Deployment
+      name: auth-service
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 5
+  - target:
+      kind: Deployment
+      name: doc-service
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 5
+  - target:
+      kind: Deployment
+      name: code-service
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      kind: Deployment
+      name: board-service
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      kind: Deployment
+      name: project-service
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 5
+  - target:
+      kind: Deployment
+      name: notification-service
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      kind: Deployment
+      name: ai-service
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 5
+  - target:
+      kind: Deployment
+      name: web
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 5
+
+  # Production resource limits - increase for all backend services
+  - target:
+      kind: Deployment
+      labelSelector: app.kubernetes.io/component=backend
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 512Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 1000m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 1Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 2000m
+
+  # Production HPA - increase max replicas
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: api-gateway
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 5
+      - op: replace
+        path: /spec/maxReplicas
+        value: 30
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: ws-gateway
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 10
+      - op: replace
+        path: /spec/maxReplicas
+        value: 100
+
+patchesStrategicMerge:
+  - production-config.yaml
+
+configMapGenerator:
+  - name: collabspace-production-env
+    literals:
+      - LOG_LEVEL=warn
+      - NODE_ENV=production
