@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: collabspace-config
+  namespace: collabspace-staging
+data:
+  NODE_ENV: staging
+  LOG_LEVEL: debug
+  AUTH_SERVICE_URL: http://staging-auth-service.collabspace-staging.svc.cluster.local:4002
+  DOC_SERVICE_URL: http://staging-doc-service.collabspace-staging.svc.cluster.local:4003
+  CODE_SERVICE_URL: http://staging-code-service.collabspace-staging.svc.cluster.local:4004
+  BOARD_SERVICE_URL: http://staging-board-service.collabspace-staging.svc.cluster.local:4005
+  PROJECT_SERVICE_URL: http://staging-project-service.collabspace-staging.svc.cluster.local:4006
+  NOTIFICATION_SERVICE_URL: http://staging-notification-service.collabspace-staging.svc.cluster.local:4007
+  AI_SERVICE_URL: http://staging-ai-service.collabspace-staging.svc.cluster.local:4008
+  REDIS_URL: redis://staging-redis.collabspace-staging.svc.cluster.local:6379
+  KAFKA_BROKERS: staging-kafka-0.staging-kafka-headless.collabspace-staging.svc.cluster.local:9092
+  JAEGER_ENDPOINT: http://staging-jaeger.collabspace-staging.svc.cluster.local:14268/api/traces
+  JWT_EXPIRY: "1h"
+  JWT_REFRESH_EXPIRY: "30d"
+  AI_MODEL: gpt-4o
+  AI_MAX_TOKENS: "4096"
+  SMTP_PORT: "587"
+  SMTP_FROM: noreply-staging@collabspace.io
