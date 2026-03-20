@@ -1,0 +1,39 @@
+{
+  "name": "collabspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CollabSpace — AI-powered collaboration operating system",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "db:migrate": "turbo run db:migrate --filter=@collabspace/doc-service --filter=@collabspace/code-service --filter=@collabspace/project-service --filter=@collabspace/auth-service",
+    "db:seed": "turbo run db:seed",
+    "docker:build": "docker-compose -f infra/docker/docker-compose.yml build",
+    "docker:up": "docker-compose -f infra/docker/docker-compose.yml up -d",
+    "docker:down": "docker-compose -f infra/docker/docker-compose.yml down",
+    "k8s:deploy": "kubectl apply -k infra/k8s/overlays/production",
+    "load-test": "k6 run tests/load/scenarios.js",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "eslint": "^8.56.0",
+    "prettier": "^3.2.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "packageManager": "npm@10.0.0"
+}
