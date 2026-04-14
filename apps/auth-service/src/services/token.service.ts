@@ -62,7 +62,7 @@ export function generateAccessToken(user: TokenUser): string {
     expiresIn: config.jwtAccessExpiry,
     issuer: 'collabspace-auth',
     audience: 'collabspace',
-  });
+  } as jwt.SignOptions);
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload {
@@ -105,7 +105,7 @@ export async function generateRefreshToken(user: TokenUser): Promise<string> {
     expiresIn: config.jwtRefreshExpiry,
     issuer: 'collabspace-auth',
     audience: 'collabspace',
-  });
+  } as jwt.SignOptions);
 
   // Store refresh token hash in Redis so we can revoke individual tokens
   const tokenHash = hashToken(token);
