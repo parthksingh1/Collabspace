@@ -24,7 +24,7 @@ function requireEnv(key: string, fallback?: string): string {
 
 function loadConfig(): WsGatewayConfig {
   return {
-    port: parseInt(requireEnv('WS_GATEWAY_PORT', '4001'), 10),
+    port: parseInt(process.env.PORT ?? requireEnv('WS_GATEWAY_PORT', '4001'), 10),
     nodeEnv: requireEnv('NODE_ENV', 'development'),
     jwtSecret: requireEnv('JWT_SECRET', 'dev-jwt-secret-change-in-production'),
     redisUrl: requireEnv('REDIS_URL', 'redis://localhost:6379'),

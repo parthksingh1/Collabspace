@@ -27,7 +27,7 @@ function requireEnv(key: string, fallback?: string): string {
 
 function loadConfig(): Config {
   return {
-    port: parseInt(requireEnv('AUTH_PORT', '4002'), 10),
+    port: parseInt(process.env.PORT ?? requireEnv('AUTH_PORT', '4002'), 10),
     nodeEnv: requireEnv('NODE_ENV', 'development'),
     jwtSecret: requireEnv('JWT_SECRET', 'dev-jwt-secret-change-in-production'),
     jwtRefreshSecret: requireEnv('JWT_REFRESH_SECRET', 'dev-refresh-secret-change-in-production'),
