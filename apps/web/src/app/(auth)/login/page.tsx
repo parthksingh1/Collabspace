@@ -3,9 +3,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ArrowRight, Zap, Copy, Check } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useToastStore } from '@/stores/toast-store';
+
+const DEMO_EMAIL = 'demo@collabspace.io';
+const DEMO_PASSWORD = 'Demo1234!';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,6 +18,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState<'email' | 'password' | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,6 +31,36 @@ export default function LoginPage() {
       const msg = err instanceof Error ? err.message : 'Invalid credentials';
       setError(msg);
       addToast({ title: 'Sign in failed', description: msg, variant: 'error' });
+    }
+  };
+
+  const fillDemo = () => {
+    setEmail(DEMO_EMAIL);
+    setPassword(DEMO_PASSWORD);
+    setError('');
+  };
+
+  const tryDemo = async () => {
+    setEmail(DEMO_EMAIL);
+    setPassword(DEMO_PASSWORD);
+    setError('');
+    try {
+      await login(DEMO_EMAIL, DEMO_PASSWORD);
+      addToast({ title: 'Welcome to the demo!', description: 'Exploring with the guest account.', variant: 'success' });
+      router.push('/');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Demo sign-in failed';
+      setError(msg);
+    }
+  };
+
+  const copy = async (value: string, kind: 'email' | 'password') => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(kind);
+      setTimeout(() => setCopied(null), 1500);
+    } catch {
+      // Clipboard may be unavailable; ignore silently
     }
   };
 
@@ -52,6 +86,74 @@ export default function LoginPage() {
             <p className="mt-2 text-sm text-surface-500 leading-relaxed">
               Sign in to your account to continue where you left off.
             </p>
+          </div>
+
+          {/* Demo credentials */}
+          <div className="mb-6 rounded-xl border border-brand-200 bg-brand-50/50 p-4 dark:border-brand-500/20 dark:bg-brand-950/20">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-brand-500/10 text-brand-600 dark:text-brand-400">
+                <Zap className="h-3.5 w-3.5" />
+              </div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-brand-700 dark:text-brand-400">
+                Try the demo
+              </h3>
+            </div>
+            <p className="text-xs text-surface-600 dark:text-surface-400 leading-relaxed mb-3">
+              Explore every module with our read-only demo account — no signup required.
+            </p>
+            <div className="space-y-1.5 mb-3">
+              <button
+                type="button"
+                onClick={() => copy(DEMO_EMAIL, 'email')}
+                className="group flex w-full items-center justify-between rounded-md bg-white px-3 py-2 text-xs text-surface-700 transition-colors hover:bg-surface-50 dark:bg-surface-900 dark:text-surface-300 dark:hover:bg-surface-800"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="font-mono text-surface-400 w-14">email</span>
+                  <span className="font-mono">{DEMO_EMAIL}</span>
+                </span>
+                {copied === 'email' ? (
+                  <Check className="h-3.5 w-3.5 text-success-500" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5 text-surface-400 opacity-0 transition-opacity group-hover:opacity-100" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => copy(DEMO_PASSWORD, 'password')}
+                className="group flex w-full items-center justify-between rounded-md bg-white px-3 py-2 text-xs text-surface-700 transition-colors hover:bg-surface-50 dark:bg-surface-900 dark:text-surface-300 dark:hover:bg-surface-800"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="font-mono text-surface-400 w-14">password</span>
+                  <span className="font-mono">{DEMO_PASSWORD}</span>
+                </span>
+                {copied === 'password' ? (
+                  <Check className="h-3.5 w-3.5 text-success-500" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5 text-surface-400 opacity-0 transition-opacity group-hover:opacity-100" />
+                )}
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={fillDemo}
+                className="flex-1 rounded-md border border-brand-300 bg-white px-3 py-1.5 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-50 dark:border-brand-500/30 dark:bg-surface-900 dark:text-brand-400 dark:hover:bg-brand-950/30"
+              >
+                Fill fields
+              </button>
+              <button
+                type="button"
+                onClick={tryDemo}
+                disabled={isLoading}
+                className="flex-1 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <Loader2 className="mx-auto h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  'Sign in as Guest'
+                )}
+              </button>
+            </div>
           </div>
 
           {error && (
