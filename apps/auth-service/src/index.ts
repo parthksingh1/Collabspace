@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.routes.js';
+import { accountRouter } from './routes/account.routes.js';
 import { logger } from './utils/logger.js';
 
 const app = express();
@@ -85,6 +86,7 @@ app.get('/auth/me', (req: Request, res: Response, next: NextFunction) => {
 // ---------------------------------------------------------------------------
 
 app.use('/auth', authRouter);
+app.use('/account', accountRouter);
 
 // ---------------------------------------------------------------------------
 // 404 handler
