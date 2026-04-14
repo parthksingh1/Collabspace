@@ -28,7 +28,7 @@ function env(key: string, fallback?: string): string {
 }
 
 export const config: GatewayConfig = {
-  port: parseInt(env('GATEWAY_PORT', '4000'), 10),
+  port: parseInt(process.env.PORT ?? env('GATEWAY_PORT', '4000'), 10),
   nodeEnv: env('NODE_ENV', 'development'),
   jwtSecret: env('JWT_SECRET', 'dev-jwt-secret-change-in-production'),
   redisUrl: env('REDIS_URL', 'redis://localhost:6379'),
