@@ -4,13 +4,12 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   FileText, Code2, PenTool, FolderKanban, LayoutDashboard, Settings,
-  ChevronLeft, ChevronRight, Plus, Search, Sparkles,
-  Users, BarChart3, ChevronsUpDown, MessageCircle,
+  ChevronLeft, ChevronRight, Search, Sparkles,
+  Users, BarChart3, MessageCircle, LayoutGrid, Activity, CreditCard,
 } from 'lucide-react';
-import { cn, getInitials } from '@/lib/utils';
-import { useWorkspaceStore } from '@/stores/workspace-store';
-import { useAuthStore } from '@/stores/auth-store';
+import { cn } from '@/lib/utils';
 import { useAIStore } from '@/stores/ai-store';
+import { WorkspaceSwitcher } from './workspace-switcher';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -26,16 +25,20 @@ const mainNavItems: { href: string; label: string; icon: typeof LayoutDashboard;
   { href: '/chat', label: 'Chat', icon: MessageCircle, badge: 5 },
 ];
 
-const bottomNavItems = [
+const workNavItems: { href: string; label: string; icon: typeof LayoutDashboard }[] = [
+  { href: '/activity', label: 'Activity', icon: Activity },
+  { href: '/templates', label: 'Templates', icon: LayoutGrid },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
+];
+
+const bottomNavItems = [
   { href: '/team', label: 'Team', icon: Users },
+  { href: '/billing', label: 'Billing', icon: CreditCard },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
-  const { workspaces, currentWorkspace, setCurrentWorkspace } = useWorkspaceStore();
-  const { user } = useAuthStore();
   const { toggleSidebar: toggleAI } = useAIStore();
 
   const isActive = (href: string) => {
@@ -53,27 +56,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     >
       {/* Workspace Selector */}
       <div className={cn('flex items-center h-[var(--header-height)] border-b border-surface-200 dark:border-surface-800', collapsed ? 'justify-center px-2' : 'px-3')}>
-        <button className={cn(
-          'flex items-center gap-2.5 rounded-lg transition-colors w-full',
-          !collapsed && 'hover:bg-surface-50 dark:hover:bg-surface-900 px-2 py-1.5'
-        )}>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-900 dark:bg-surface-100">
-            <span className="text-xs font-bold text-white dark:text-surface-900">
-              {currentWorkspace?.name?.[0]?.toUpperCase() || 'C'}
-            </span>
-          </div>
-          {!collapsed && (
-            <>
-              <div className="flex-1 min-w-0 text-left">
-                <p className="text-sm font-semibold text-surface-900 dark:text-white truncate">
-                  {currentWorkspace?.name || 'CollabSpace'}
-                </p>
-                <p className="text-2xs text-surface-400 truncate">{user?.email}</p>
-              </div>
-              <ChevronsUpDown className="h-3.5 w-3.5 text-surface-400 shrink-0" />
-            </>
-          )}
-        </button>
+        <WorkspaceSwitcher collapsed={collapsed} />
       </div>
 
       {/* Search + AI */}
@@ -131,38 +114,36 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           })}
         </div>
 
-        {/* Workspaces Section */}
-        {!collapsed && workspaces.length > 0 && (
-          <div className="mt-6">
+        {/* Workspace nav: Activity / Templates / Analytics */}
+        <div className="mt-4">
+          {!collapsed && (
             <div className="flex items-center justify-between px-3 mb-1">
               <span className="text-2xs font-semibold uppercase tracking-widest text-surface-400">
-                Workspaces
+                Workspace
               </span>
-              <button className="rounded p-0.5 text-surface-400 hover:text-surface-600 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors">
-                <Plus className="h-3 w-3" />
-              </button>
             </div>
-            <div className="space-y-px">
-              {workspaces.map((ws) => (
-                <button
-                  key={ws.id}
-                  onClick={() => setCurrentWorkspace(ws)}
+          )}
+          <div className="space-y-px">
+            {workNavItems.map((item) => {
+              const Icon = item.icon;
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
                   className={cn(
-                    'flex w-full items-center gap-2.5 rounded-lg px-3 py-[6px] text-[13px] transition-colors text-left',
-                    currentWorkspace?.id === ws.id
-                      ? 'bg-surface-100 text-surface-900 dark:bg-surface-800 dark:text-white'
-                      : 'text-surface-500 hover:bg-surface-50 hover:text-surface-700 dark:hover:bg-surface-800/50 dark:hover:text-surface-300'
+                    active ? 'sidebar-item-active' : 'sidebar-item',
+                    collapsed && 'justify-center px-0'
                   )}
+                  title={collapsed ? item.label : undefined}
                 >
-                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-surface-200 text-2xs font-bold text-surface-600 dark:bg-surface-700 dark:text-surface-300">
-                    {ws.name[0].toUpperCase()}
-                  </div>
-                  <span className="truncate">{ws.name}</span>
-                </button>
-              ))}
-            </div>
+                  <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-brand-600 dark:text-brand-400' : '')} />
+                  {!collapsed && <span>{item.label}</span>}
+                </Link>
+              );
+            })}
           </div>
-        )}
+        </div>
 
         {/* AI Quick Access */}
         {!collapsed && (
