@@ -22,6 +22,7 @@ interface RouteMapping {
 
 const ROUTE_MAPPINGS: RouteMapping[] = [
   { path: '/api/auth',          serviceKey: 'auth',          stripPrefix: '/api' },
+  { path: '/api/account',       serviceKey: 'auth',          stripPrefix: '/api' },
   { path: '/api/documents',     serviceKey: 'documents',     stripPrefix: '/api' },
   { path: '/api/code',          serviceKey: 'code',          stripPrefix: '/api' },
   { path: '/api/boards',        serviceKey: 'boards',        stripPrefix: '/api' },
