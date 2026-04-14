@@ -32,6 +32,15 @@ export type { CardProps, CardHeaderProps } from './components/card.js';
 export { Spinner } from './components/spinner.js';
 export type { SpinnerProps, SpinnerSize, SpinnerColor } from './components/spinner.js';
 
+export { Switch } from './components/switch.js';
+export type { SwitchProps, SwitchSize } from './components/switch.js';
+
+export { Progress } from './components/progress.js';
+export type { ProgressProps, ProgressSize, ProgressColor } from './components/progress.js';
+
+export { Skeleton } from './components/skeleton.js';
+export type { SkeletonProps, SkeletonVariant } from './components/skeleton.js';
+
 export { ToastProvider, useToast } from './components/toast.js';
 export type { Toast, ToastVariant } from './components/toast.js';
 
