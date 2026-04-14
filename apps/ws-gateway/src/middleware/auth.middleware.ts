@@ -1,5 +1,5 @@
 import type { IncomingMessage } from 'node:http';
-import type { Socket } from 'node:net';
+import type { Duplex } from 'node:stream';
 import jwt from 'jsonwebtoken';
 import { URL } from 'node:url';
 import { config } from '../config.js';
@@ -105,7 +105,7 @@ export function authenticateUpgrade(req: IncomingMessage): AuthResult {
   }
 }
 
-export function rejectUpgrade(socket: Socket, statusCode: number, reason: string): void {
+export function rejectUpgrade(socket: Duplex, statusCode: number, reason: string): void {
   const body = JSON.stringify({ error: reason });
   const response = [
     `HTTP/1.1 ${statusCode} ${reason}`,
