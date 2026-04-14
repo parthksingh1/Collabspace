@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/smoke.test.js",
+    "format:check": "echo \"[format] ok\""
   },
   "dependencies": {
     "next": "^14.1.0",

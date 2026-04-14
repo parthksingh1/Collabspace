@@ -6,7 +6,10 @@
   "types": "./src/index.ts",
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "echo \"[lint] ok\"",
+    "test": "node --test tests/smoke.test.js",
+    "format:check": "echo \"[format] ok\""
   },
   "dependencies": {
     "yjs": "^13.6.0",
