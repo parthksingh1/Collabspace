@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { AISidebar } from '@/components/ai/ai-sidebar';
 import { CommandPalette } from '@/components/ai/command-palette';
+import { KeyboardShortcutsPanel } from '@/components/layout/keyboard-shortcuts-panel';
 import { useAuthStore } from '@/stores/auth-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useAIStore } from '@/stores/ai-store';
@@ -65,6 +66,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Command Palette (Ctrl+K) */}
       <CommandPalette />
+
+      {/* Keyboard Shortcuts Panel (Ctrl+/) */}
+      <KeyboardShortcutsPanel />
     </div>
   );
 }
