@@ -251,7 +251,7 @@ function routeMessage(
 
   // ── Room join/leave ───────────────────────────────────────────────────────
   if (type === 'room:join') {
-    const { roomId, roomType } = message as { roomId: string; roomType: RoomType };
+    const { roomId, roomType } = message as unknown as { roomId: string; roomType: RoomType };
     if (!roomId || !roomType) {
       socket.send(JSON.stringify({ type: 'error:validation', message: 'roomId and roomType required' }));
       return null;
@@ -278,7 +278,7 @@ function routeMessage(
   }
 
   if (type === 'room:leave') {
-    const { roomId } = message as { roomId: string };
+    const { roomId } = message as unknown as { roomId: string };
     if (!roomId) {
       socket.send(JSON.stringify({ type: 'error:validation', message: 'roomId required' }));
       return null;
@@ -291,7 +291,7 @@ function routeMessage(
 
   // ── Presence ──────────────────────────────────────────────────────────────
   if (type === 'presence:set') {
-    const { state } = message as { state: string };
+    const { state } = message as unknown as { state: string };
     return presenceManager.setPresence(
       socket.meta.userId,
       state as 'online' | 'away' | 'busy' | 'offline',
@@ -300,7 +300,7 @@ function routeMessage(
   }
 
   if (type === 'presence:typing') {
-    const { roomId, isTyping } = message as { roomId: string; isTyping: boolean };
+    const { roomId, isTyping } = message as unknown as { roomId: string; isTyping: boolean };
     return presenceManager.setTypingIndicator({
       userId: socket.meta.userId,
       roomId,
@@ -311,22 +311,22 @@ function routeMessage(
 
   // ── Document messages ─────────────────────────────────────────────────────
   if (type.startsWith('doc:')) {
-    return handleDocumentMessage(socket, message as Parameters<typeof handleDocumentMessage>[1]);
+    return handleDocumentMessage(socket, message as unknown as Parameters<typeof handleDocumentMessage>[1]);
   }
 
   // ── Code messages ─────────────────────────────────────────────────────────
   if (type.startsWith('code:')) {
-    return handleCodeMessage(socket, message as Parameters<typeof handleCodeMessage>[1]);
+    return handleCodeMessage(socket, message as unknown as Parameters<typeof handleCodeMessage>[1]);
   }
 
   // ── Whiteboard messages ───────────────────────────────────────────────────
   if (type.startsWith('wb:')) {
-    return handleWhiteboardMessage(socket, message as Parameters<typeof handleWhiteboardMessage>[1]);
+    return handleWhiteboardMessage(socket, message as unknown as Parameters<typeof handleWhiteboardMessage>[1]);
   }
 
   // ── Project messages ──────────────────────────────────────────────────────
   if (type.startsWith('project:')) {
-    return handleProjectMessage(socket, message as Parameters<typeof handleProjectMessage>[1]);
+    return handleProjectMessage(socket, message as unknown as Parameters<typeof handleProjectMessage>[1]);
   }
 
   // ── Ping (application-level) ──────────────────────────────────────────────
