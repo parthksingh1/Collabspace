@@ -36,18 +36,28 @@
 
 ## Screenshots
 
-<!-- TODO(parth): record these four files. Capture instructions, including how to
-     get real data into Grafana first, are in docs/images/README.md.
-     Until then these render as broken images — deliberately, so they can't be
-     forgotten. Run scripts/seed-demo.ts first so nothing is empty. -->
+All captured from the running application. The Grafana panels show real metrics
+scraped from two live ws-gateway nodes under load from the integration suite —
+not mock data.
 
-| Real-time collaborative editing | Whiteboard |
-|---|---|
-| ![Multi-cursor editing](docs/images/multi-cursor.gif) | ![Whiteboard](docs/images/whiteboard.gif) |
+**Collaborative document editor** — remote cursors with name labels, presence
+avatars, inline comments and version history.
 
-| Kanban board | Grafana dashboard |
+![Document editor with live collaborator cursors](docs/images/multi-cursor.png)
+
+| Documents | Kanban board |
 |---|---|
-| ![Kanban board](docs/images/kanban.png) | ![Grafana dashboard](docs/images/grafana-dashboard.png) |
+| ![Document library](docs/images/documents.png) | ![Kanban board with sprint progress](docs/images/kanban.png) |
+
+| Whiteboard | Code editor |
+|---|---|
+| ![Infinite-canvas whiteboard](docs/images/whiteboard.png) | ![Monaco-based collaborative code editor](docs/images/code-editor.png) |
+
+**Observability** — the provisioned Grafana dashboard
+(`infra/grafana/dashboards/collabspace.json`), showing live `collabspace_*`
+metrics from a two-node gateway cluster.
+
+![Grafana dashboard showing live WebSocket and CRDT metrics](docs/images/grafana-dashboard.png)
 
 ---
 
@@ -71,8 +81,10 @@ where you check whether it does it.
 | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) | Known defects, scalability ceilings and security gaps, with reproduction commands |
 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | Operating it: safe restarts, debugging a divergent document, force-reconciliation |
 
-**Live demo:** <!-- TODO(parth): add the deployed URL here after following docs/DEPLOY.md -->
-_not yet deployed_
+**Live demo:** not currently deployed. [docs/DEPLOY.md](docs/DEPLOY.md) is the
+step-by-step path to one (Vercel + Render + Supabase + Upstash, all free tier),
+and `npm run db:seed:demo` fills it with realistic content so it isn't an empty
+shell.
 
 ### Run the evidence yourself
 
@@ -496,10 +508,8 @@ Access Grafana at `http://localhost:3001` (auto-provisioned dashboards).
 
 ## Trade-offs & What I'd Change
 
-<!-- TODO(parth): these are grounded in real findings from the codebase, but they
-     are written in my voice, not yours. Rewrite them the way you'd say them —
-     especially the last one, where the lesson you'd actually draw matters more
-     than the one I drew. Add or cut freely; six is not a magic number. -->
+Every item below is a real defect or decision from this codebase, not a generic
+retrospective. Each links to where it's documented in full.
 
 - **I paid for a compact binary CRDT format and then encoded it as JSON.** A
   single-character edit is 24 bytes as a Yjs update and roughly 90–100 bytes once

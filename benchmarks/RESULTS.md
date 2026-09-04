@@ -14,20 +14,26 @@ Last updated: 2026-09-04
 
 ## Hardware
 
-<!-- TODO(parth): fill this in from the machine you actually run the benchmarks on.
-     `systeminfo` on Windows, or `lscpu` + `free -h` on Linux, will give you most of it.
-     Leaving it blank makes every number below unciteable. -->
+The development machine, recorded 2026-09-04. Re-record this if you run the
+benchmarks anywhere else — numbers are meaningless without it.
 
 | Field | Value |
 |---|---|
-| CPU | TODO — e.g. `AMD Ryzen 7 5800H, 8C/16T, 3.2GHz base` |
-| RAM | TODO — e.g. `16 GB DDR4-3200` |
-| Disk | TODO — e.g. `NVMe SSD, 512 GB` |
-| OS | TODO — e.g. `Windows 11 26100 / WSL2 Ubuntu 22.04` |
-| Node.js | TODO — output of `node --version` |
-| Docker | TODO — output of `docker --version` |
-| k6 | TODO — output of `k6 version` |
+| CPU | Intel Core i5-10300H @ 2.50GHz, 4C/8T |
+| RAM | 7.8 GB |
+| Disk | SSD |
+| OS | Windows 11 Home Insider Preview, build 10.0.26340 |
+| Node.js | v24.15.0 |
+| Docker | 28.1.1 (build 4eba377) |
+| k6 | Not installed — this is why the load-test rows below are unmeasured |
 | Network | Loopback only — all benchmarks run against `localhost` |
+
+**This is a 4-core laptop with 8 GB of RAM.** That matters more than the rest of
+the table: the load generator and the system under test would be competing for
+four physical cores, so a 5000-VU WebSocket run on this machine would measure
+contention rather than gateway capacity. Any figure produced here would be a
+lower bound on what the code can do and an upper bound on nothing. The harness is
+built to run somewhere better.
 
 **The single most important caveat on this page:** every number here is from one
 laptop, over loopback, with the load generator and the system under test
