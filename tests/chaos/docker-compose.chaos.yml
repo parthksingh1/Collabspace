@@ -1,0 +1,83 @@
+# Chaos-test topology: two ws-gateway nodes behind one Redis.
+#
+# Intentionally minimal. No Kafka, no Postgres, no observability stack — the
+# chaos tests kill processes and assert that clients recover, and every extra
+# container is another thing that can be the reason a test is red.
+#
+# The two gateways are separate shards (SHARD_ID differs), which is what makes
+# the consistent-hash ring in apps/ws-gateway/src/shard-manager.ts non-trivial:
+# with one node every room hashes to it, and the ring is never exercised.
+#
+# Usage (the tests do this for you):
+#   docker compose -p collabspace-chaos -f tests/chaos/docker-compose.chaos.yml up -d --build
+#   docker compose -p collabspace-chaos -f tests/chaos/docker-compose.chaos.yml down -v
+
+name: collabspace-chaos
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: chaos-redis
+    command: redis-server --appendonly no --save ""
+    ports:
+      - "${CHAOS_REDIS_PORT:-6399}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s
+    networks: [chaos]
+
+  ws-gateway-1: &gateway
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile.ws-gateway.chaos
+    image: collabspace/ws-gateway:chaos
+    container_name: chaos-ws-1
+    ports:
+      - "${CHAOS_WS1_PORT:-4101}:4001"
+    environment:
+      NODE_ENV: test
+      PORT: 4001
+      SHARD_ID: chaos-shard-1
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      LOG_LEVEL: ${LOG_LEVEL:-warn}
+      # Short heartbeats so a dead peer is noticed inside a test's lifetime
+      # rather than the 30s/60s production defaults.
+      HEARTBEAT_INTERVAL_MS: "5000"
+      HEARTBEAT_TIMEOUT_MS: "10000"
+      MAX_ROOM_CAPACITY: "500"
+      # Registry heals within one shard heartbeat; keep it short so the Redis
+      # restart test does not have to wait out the 30s production default.
+      SHARD_HEARTBEAT_INTERVAL_MS: "3000"
+      SHARD_REGISTRY_REFRESH_MS: "5000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [chaos]
+
+  ws-gateway-2:
+    <<: *gateway
+    container_name: chaos-ws-2
+    ports:
+      - "${CHAOS_WS2_PORT:-4102}:4001"
+    environment:
+      NODE_ENV: test
+      PORT: 4001
+      SHARD_ID: chaos-shard-2
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      LOG_LEVEL: ${LOG_LEVEL:-warn}
+      HEARTBEAT_INTERVAL_MS: "5000"
+      HEARTBEAT_TIMEOUT_MS: "10000"
+      MAX_ROOM_CAPACITY: "500"
+      # Registry heals within one shard heartbeat; keep it short so the Redis
+      # restart test does not have to wait out the 30s production default.
+      SHARD_HEARTBEAT_INTERVAL_MS: "3000"
+      SHARD_REGISTRY_REFRESH_MS: "5000"
+
+networks:
+  chaos:
+    driver: bridge

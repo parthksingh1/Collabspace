@@ -7,6 +7,11 @@ export interface WsGatewayConfig {
   shardId: string;
   heartbeatIntervalMs: number;
   heartbeatTimeoutMs: number;
+  /** How often this shard re-asserts its registry entry. Also the worst-case
+   *  time for the registry to heal after Redis loses its data. */
+  shardHeartbeatIntervalMs: number;
+  /** How often the local hash ring is rebuilt from the registry. */
+  shardRegistryRefreshMs: number;
   maxRoomCapacity: number;
   rateLimitMessagesPerSecond: number;
   rateLimitBurstSize: number;
@@ -32,6 +37,8 @@ function loadConfig(): WsGatewayConfig {
     shardId: requireEnv('SHARD_ID', `shard-${process.pid}`),
     heartbeatIntervalMs: parseInt(requireEnv('HEARTBEAT_INTERVAL_MS', '30000'), 10),
     heartbeatTimeoutMs: parseInt(requireEnv('HEARTBEAT_TIMEOUT_MS', '60000'), 10),
+    shardHeartbeatIntervalMs: parseInt(requireEnv('SHARD_HEARTBEAT_INTERVAL_MS', '30000'), 10),
+    shardRegistryRefreshMs: parseInt(requireEnv('SHARD_REGISTRY_REFRESH_MS', '60000'), 10),
     maxRoomCapacity: parseInt(requireEnv('MAX_ROOM_CAPACITY', '100'), 10),
     rateLimitMessagesPerSecond: parseInt(requireEnv('RATE_LIMIT_MESSAGES_PER_SECOND', '50'), 10),
     rateLimitBurstSize: parseInt(requireEnv('RATE_LIMIT_BURST_SIZE', '100'), 10),

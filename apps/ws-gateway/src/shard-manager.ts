@@ -139,13 +139,13 @@ export class ShardManager {
       this.sendHeartbeat().catch((err) =>
         logger.error('Shard heartbeat failed', { error: (err as Error).message }),
       );
-    }, 30_000);
+    }, config.shardHeartbeatIntervalMs);
 
     this.registryRefreshInterval = setInterval(() => {
       this.refreshShardRegistry().catch((err) =>
         logger.error('Shard registry refresh failed', { error: (err as Error).message }),
       );
-    }, 60_000);
+    }, config.shardRegistryRefreshMs);
 
     logger.info('Shard manager initialized', { shardId: config.shardId });
   }
@@ -234,10 +234,36 @@ export class ShardManager {
     logger.debug('Shard registry refreshed', { shards: validShards });
   }
 
+  /**
+   * Refreshes this shard's registration.
+   *
+   * Deliberately re-asserts the *whole* registration rather than just bumping
+   * `lastHeartbeat`. Registration lives in two places — membership in the
+   * `shards:active` set and the `shard:<id>` hash — and only the hash carries a
+   * TTL. An earlier version updated just the hash, which meant that if Redis
+   * ever lost its data (a restart without persistence, a failover to an empty
+   * replica, an eviction) the `shards:active` set was empty and *nothing ever
+   * put this node back into it*: `sadd` only ran at startup. Every node would
+   * then rebuild an empty hash ring and stay that way until it was restarted.
+   *
+   * Making the heartbeat fully idempotent means the registry heals itself
+   * within one heartbeat interval. Covered by tests/chaos/redis-restart.test.ts.
+   */
   private async sendHeartbeat(): Promise<void> {
     const redis = getRedis();
-    await redis.hset(`shard:${config.shardId}`, 'lastHeartbeat', new Date().toISOString());
-    await redis.expire(`shard:${config.shardId}`, 120);
+    const key = `shard:${config.shardId}`;
+
+    await redis
+      .multi()
+      .sadd('shards:active', config.shardId)
+      .hset(key, {
+        id: config.shardId,
+        host: process.env.HOST ?? 'localhost',
+        port: String(config.port),
+        lastHeartbeat: new Date().toISOString(),
+      })
+      .expire(key, 120)
+      .exec();
   }
 
   private handleShardEvent(channel: string, message: string): void {

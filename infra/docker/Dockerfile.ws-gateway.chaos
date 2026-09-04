@@ -1,0 +1,46 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ws-gateway image for chaos tests.
+#
+# Deliberately NOT the production Dockerfile.service. This one runs the gateway
+# straight from TypeScript source under tsx, which means:
+#   - no build step to keep in sync with a fast-moving source tree
+#   - the process that gets killed is the same code you run with `npm run dev`
+#   - image builds in seconds, so `npm run test:chaos` is not a coffee break
+#
+# It is not a production image. It ships dev dependencies, runs a transpiler at
+# startup, and is not size-optimised. Use infra/docker/Dockerfile.service for
+# anything real.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM node:20-alpine
+
+RUN apk add --no-cache wget dumb-init
+
+WORKDIR /app
+
+# Workspace manifests first, so npm install caches across source edits.
+COPY package.json package-lock.json ./
+COPY apps/ws-gateway/package.json ./apps/ws-gateway/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/crdt/package.json ./packages/crdt/
+COPY packages/ai-sdk/package.json ./packages/ai-sdk/
+COPY packages/ui/package.json ./packages/ui/
+
+RUN npm install --no-audit --no-fund --legacy-peer-deps --workspace=@collabspace/ws-gateway --include-workspace-root
+
+COPY tsconfig.json ./
+COPY packages/ ./packages/
+COPY apps/ws-gateway/ ./apps/ws-gateway/
+
+EXPOSE 4001
+
+# NOTE: `wget --spider` sends a HEAD request. The gateway's HTTP handler only
+# matches `req.method === 'GET'` on /health, so a spider probe falls through to
+# the 404 branch and the container is reported unhealthy while it is serving
+# perfectly well. Use a real GET and throw the body away.
+# (The production infra/docker/docker-compose.yml has the same bug — see
+# docs/RUNBOOK.md.)
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 -O /dev/null "http://localhost:${PORT:-4001}/health" || exit 1
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["npx", "tsx", "apps/ws-gateway/src/index.ts"]

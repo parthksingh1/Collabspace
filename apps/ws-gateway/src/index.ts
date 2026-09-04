@@ -7,6 +7,7 @@ import { ConnectionManager, type AuthenticatedSocket } from './connection-manage
 import { RoomManager, type RoomType } from './room-manager.js';
 import { ShardManager } from './shard-manager.js';
 import { PresenceManager } from './presence-manager.js';
+import { CrossShardBroadcast } from './cross-shard-broadcast.js';
 import { RateLimiter } from './middleware/rate-limiter.js';
 import { authenticateUpgrade, rejectUpgrade } from './middleware/auth.middleware.js';
 import { handleDocumentMessage } from './handlers/document.handler.js';
@@ -21,6 +22,7 @@ const connectionManager = ConnectionManager.getInstance();
 const roomManager = RoomManager.getInstance();
 const shardManager = ShardManager.getInstance();
 const presenceManager = PresenceManager.getInstance();
+const crossShardBroadcast = CrossShardBroadcast.getInstance();
 const rateLimiter = new RateLimiter();
 
 let socketIdCounter = 0;
@@ -38,6 +40,10 @@ const server = createServer((req: IncomingMessage, res: ServerResponse) => {
         shard: config.shardId,
         connections: connectionManager.getConnectionCount(),
         rooms: roomManager.getRoomCount(),
+        // Rooms this node is subscribed to for cross-shard fanout. Should track
+        // `rooms`; a persistent gap means peers' updates are not arriving and
+        // documents are silently splitting across nodes.
+        fanoutSubscriptions: crossShardBroadcast.getSubscribedRoomCount(),
         timestamp: new Date().toISOString(),
       }),
     );
@@ -349,6 +355,7 @@ function routeMessage(
 async function start(): Promise<void> {
   try {
     await shardManager.initialize();
+    crossShardBroadcast.start();
     connectionManager.startHeartbeat();
 
     server.listen(config.port, () => {
@@ -369,6 +376,7 @@ async function shutdown(signal: string): Promise<void> {
 
   rateLimiter.shutdown();
   await connectionManager.shutdown();
+  await crossShardBroadcast.shutdown();
   await shardManager.shutdown();
   await closeAllRedis();
 

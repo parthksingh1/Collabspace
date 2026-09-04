@@ -83,3 +83,31 @@ export const disconnectedByTimeout = new Counter({
   help: 'Total connections closed due to heartbeat timeout',
   registers: [registry],
 });
+
+// ── Cross-shard fanout metrics ────────────────────────────────────────────────
+//
+// Added alongside the cross-shard broadcast path. `published` and `received`
+// should track each other across the cluster: if a node publishes steadily and
+// its peers receive nothing, room fanout is broken and documents are silently
+// splitting.
+
+export const crossShardPublished = new Counter({
+  name: 'ws_cross_shard_published_total',
+  help: 'Room messages published to peer shards via Redis pub/sub',
+  labelNames: ['shard'] as const,
+  registers: [registry],
+});
+
+export const crossShardReceived = new Counter({
+  name: 'ws_cross_shard_received_total',
+  help: 'Room messages received from peer shards and delivered locally',
+  labelNames: ['origin_shard'] as const,
+  registers: [registry],
+});
+
+export const crossShardDropped = new Counter({
+  name: 'ws_cross_shard_dropped_total',
+  help: 'Cross-shard envelopes dropped, by reason',
+  labelNames: ['reason'] as const,
+  registers: [registry],
+});

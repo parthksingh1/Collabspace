@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { logger } from './utils/logger.js';
 import { getRedis } from './utils/redis.js';
 import { activeRooms, roomMembersGauge } from './metrics.js';
+import { CrossShardBroadcast } from './cross-shard-broadcast.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,12 @@ export class RoomManager {
     room.memberCount = this.roomMembers.get(roomId)!.size;
     roomMembersGauge.labels(roomId, roomType).set(room.memberCount);
 
+    // Subscribe this node to the room's cross-shard fanout channel. Without it,
+    // members of the same room sitting on different gateway nodes never see
+    // each other's messages and the room silently splits. See
+    // cross-shard-broadcast.ts.
+    await CrossShardBroadcast.getInstance().addLocalMember(roomId);
+
     // Store in Redis for cross-shard visibility
     const redis = getRedis();
     await redis.sadd(`room:${roomId}:members`, userId);
@@ -119,6 +126,7 @@ export class RoomManager {
     const room = this.rooms.get(roomId);
 
     connectionManager.removeFromRoom(socketId, roomId);
+    await CrossShardBroadcast.getInstance().removeLocalMember(roomId);
 
     const members = this.roomMembers.get(roomId);
     if (members) {
@@ -179,7 +187,28 @@ export class RoomManager {
     return this.rooms.get(roomId);
   }
 
+  /**
+   * Delivers `message` to every member of the room — on this node and on every
+   * other gateway node holding members of the same room.
+   *
+   * Local delivery happens synchronously and first, so a single-node deployment
+   * behaves exactly as it did before cross-shard fanout existed. The Redis
+   * publish is fire-and-forget: a keystroke should not wait on a round trip.
+   *
+   * `excludeSocketId` applies locally only — the excluded socket is on this
+   * node by definition, so peers have nothing to exclude.
+   */
   broadcastToRoom(roomId: string, message: string, excludeSocketId?: string): void {
+    ConnectionManager.getInstance().broadcastToRoom(roomId, message, excludeSocketId);
+    CrossShardBroadcast.getInstance().publish(roomId, message);
+  }
+
+  /**
+   * Local-only delivery, for messages that must not leave this node. Kept
+   * separate rather than adding a boolean flag to broadcastToRoom, so that the
+   * cross-shard path is the default and skipping it has to be deliberate.
+   */
+  broadcastToLocalRoom(roomId: string, message: string, excludeSocketId?: string): void {
     ConnectionManager.getInstance().broadcastToRoom(roomId, message, excludeSocketId);
   }
 

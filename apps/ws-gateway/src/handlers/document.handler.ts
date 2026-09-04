@@ -17,6 +17,20 @@ interface DocumentSyncStep2 {
   type: 'doc:sync:step2';
   documentId: string;
   update: number[];
+  /**
+   * The user whose step1 this answers, taken from that message's `fromUserId`.
+   *
+   * When present the reply is delivered only to that user instead of the whole
+   * room. This matters more than it looks: step1 is broadcast to every member,
+   * so every member answers, and if each answer is also broadcast then a single
+   * reconnect costs O(N^2) messages in a room of N — each carrying a full state
+   * diff. With 50 clients reconnecting at once (a node failure, say) that
+   * saturates the per-connection rate limiter and reconnects stall.
+   *
+   * Optional so that older clients that omit it keep working; they just get the
+   * old broadcast behaviour.
+   */
+  targetUserId?: string;
 }
 
 interface DocumentUpdate {
@@ -92,10 +106,15 @@ export async function handleDocumentMessage(
 
     case 'doc:sync:step2': {
       // Response to step1: the diff/update that the receiver is missing
-      const { documentId, update } = message;
+      const { documentId, update, targetUserId } = message;
       const roomId = `doc:${documentId}`;
 
-      logger.debug('Document sync step 2', { userId, documentId, updateSize: update.length });
+      logger.debug('Document sync step 2', {
+        userId,
+        documentId,
+        updateSize: update.length,
+        targeted: Boolean(targetUserId),
+      });
 
       const response = JSON.stringify({
         type: 'doc:sync:step2',
@@ -104,7 +123,23 @@ export async function handleDocumentMessage(
         fromUserId: userId,
       });
 
-      roomManager.broadcastToRoom(roomId, response, socketId);
+      // Deliver only to the client that asked, when we can reach it directly.
+      // See the note on targetUserId for why broadcasting does not scale.
+      //
+      // sendToUser only reaches sockets on this node, so if the asker is
+      // connected to a different shard we fall back to the room broadcast,
+      // which does cross shards. Correctness first: a missed step2 leaves that
+      // client permanently out of date, which is far worse than the extra
+      // fanout.
+      const connectionManager = ConnectionManager.getInstance();
+      const targetIsLocal =
+        Boolean(targetUserId) && connectionManager.getConnectionsByUser(targetUserId!).length > 0;
+
+      if (targetIsLocal) {
+        connectionManager.sendToUser(targetUserId!, response);
+      } else {
+        roomManager.broadcastToRoom(roomId, response, socketId);
+      }
       messagesSent.labels('doc:sync:step2', 'document').inc();
 
       // Persist via Kafka
