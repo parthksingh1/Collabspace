@@ -20,19 +20,48 @@
 
   body {
     @apply bg-surface-50 text-surface-900 dark:bg-surface-950 dark:text-surface-100;
+    /* cv11 = single-storey 'a' in some contexts, ss01/ss03 = alternate glyph
+       sets. These only take effect now that font-sans actually resolves to the
+       Inter variable font (see the fontFamily note in tailwind.config.ts).
+       tnum keeps digits monospaced so numbers in tables and counters do not
+       jitter as they change. */
     font-feature-settings: 'cv11', 'ss01', 'ss03';
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
 
+  /* Optical tracking. Type set at a single tracking value across all sizes
+     looks loose when large and cramped when small; these corrections are what
+     make headings feel deliberate rather than merely big. */
+  h1, h2, h3, h4 {
+    @apply font-semibold text-surface-900 dark:text-surface-50;
+    letter-spacing: theme('letterSpacing.heading');
+    text-wrap: balance;
+  }
+  h1 { letter-spacing: theme('letterSpacing.display'); }
+
   ::selection {
-    @apply bg-brand-200/60 dark:bg-brand-800/40;
+    @apply bg-brand-300/40 dark:bg-brand-500/30;
   }
 
-  /* Smooth focus outlines */
+  /* Focus rings. Two layers: a white/dark spacer ring then the brand ring, so
+     the indicator stays visible against any background it lands on. */
   :focus-visible {
-    @apply outline-none ring-2 ring-brand-500/40 ring-offset-2 ring-offset-white dark:ring-offset-surface-950;
+    @apply outline-none ring-2 ring-brand-500/50 ring-offset-2 ring-offset-white dark:ring-offset-surface-950;
+  }
+
+  /* Respect reduced-motion. Every animation in this file is decorative, so
+     there is no reason any of it should play for someone who has asked it not
+     to. Kept as a blanket rule rather than per-component so new animations are
+     covered by default. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
@@ -40,27 +69,53 @@
   /* ─── Buttons ─── */
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-[var(--radius)] font-medium text-sm
-      transition-all duration-150 ease-out
-      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:ring-offset-2
+      transition-all duration-150 ease-swift
+      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:ring-offset-2
       disabled:pointer-events-none disabled:opacity-40
-      active:scale-[0.98];
+      active:scale-[0.97];
+    letter-spacing: theme('letterSpacing.label');
+    /* Buttons contain numbers often enough (counts, prices) that jitter on
+       change is worth pre-empting. */
+    font-variant-numeric: tabular-nums;
   }
+
+  /* The primary button is the most-looked-at element in the product, so it gets
+     the most treatment: a subtle vertical gradient reading as a lit convex
+     surface, a 1px inner top highlight, and a tinted shadow in the brand hue
+     rather than neutral grey — coloured shadows are what stop a saturated
+     button looking pasted onto the page. */
   .btn-primary {
-    @apply btn bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800
-      shadow-sm hover:shadow-md;
+    @apply btn text-white
+      bg-gradient-to-b from-brand-500 to-brand-600
+      hover:from-brand-500 hover:to-brand-700
+      active:from-brand-700 active:to-brand-800
+      shadow-[0_1px_2px_rgb(16_24_40_/_0.10),0_2px_8px_-2px_rgb(20_141_127_/_0.45),inset_0_1px_0_0_rgb(255_255_255_/_0.18)]
+      hover:shadow-[0_1px_2px_rgb(16_24_40_/_0.12),0_4px_14px_-2px_rgb(20_141_127_/_0.55),inset_0_1px_0_0_rgb(255_255_255_/_0.22)]
+      active:shadow-[0_1px_1px_rgb(16_24_40_/_0.10),inset_0_1px_2px_0_rgb(0_0_0_/_0.12)];
   }
+
   .btn-secondary {
     @apply btn border border-surface-200 bg-white text-surface-700
-      hover:bg-surface-50 hover:border-surface-300
-      dark:bg-surface-900 dark:border-surface-700 dark:text-surface-300
-      dark:hover:bg-surface-800 dark:hover:border-surface-600;
+      shadow-soft shadow-hairline
+      hover:bg-surface-50 hover:border-surface-300 hover:shadow-medium
+      active:bg-surface-100
+      dark:bg-surface-800 dark:border-surface-700 dark:text-surface-200
+      dark:shadow-soft-dark dark:shadow-hairline-dark
+      dark:hover:bg-surface-750 dark:hover:border-surface-600;
   }
+
   .btn-ghost {
     @apply btn text-surface-600 hover:bg-surface-100 hover:text-surface-900
-      dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:text-surface-200;
+      active:bg-surface-200
+      dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:text-surface-100
+      dark:active:bg-surface-750;
   }
+
   .btn-danger {
-    @apply btn bg-danger-500 text-white hover:bg-danger-700 shadow-sm;
+    @apply btn text-white
+      bg-gradient-to-b from-danger-500 to-[#dc2626]
+      hover:to-danger-700
+      shadow-[0_1px_2px_rgb(16_24_40_/_0.10),0_2px_8px_-2px_rgb(239_68_68_/_0.40),inset_0_1px_0_0_rgb(255_255_255_/_0.18)];
   }
 
   /* ─── Inputs ─── */
@@ -68,45 +123,82 @@
     @apply w-full rounded-[var(--radius)] border border-surface-300 bg-white px-3 py-2 text-sm
       text-surface-900 placeholder:text-surface-400
       shadow-inner-soft
-      focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20
-      dark:border-surface-700 dark:bg-surface-900 dark:text-surface-100
-      dark:placeholder:text-surface-500 dark:focus:border-brand-500;
-    transition: border-color 0.15s, box-shadow 0.15s;
+      hover:border-surface-400
+      focus:border-brand-500 focus:outline-none focus:ring-[3px] focus:ring-brand-500/15
+      dark:border-surface-700 dark:bg-surface-850 dark:text-surface-100
+      dark:placeholder:text-surface-500 dark:hover:border-surface-600
+      dark:focus:border-brand-500 dark:focus:ring-brand-500/20;
+    /* A 3px low-opacity ring reads as a soft halo rather than an outline, which
+       is the difference between "focused" and "erroring". Transitioning only
+       the two properties that change avoids animating layout. */
+    transition: border-color 0.15s theme('transitionTimingFunction.swift'),
+                box-shadow 0.15s theme('transitionTimingFunction.swift');
   }
 
   /* ─── Cards ─── */
+  /* Light mode gets a hairline top highlight; dark mode gets a lighter surface
+     than the page plus its own hairline, because a drop shadow on a near-black
+     background is invisible and elevation has to come from value instead. */
   .card {
-    @apply rounded-xl border border-surface-200 bg-white shadow-soft
-      dark:border-surface-800 dark:bg-surface-900;
+    @apply rounded-xl border border-surface-200 bg-white
+      shadow-soft shadow-hairline
+      dark:border-surface-800 dark:bg-surface-900
+      dark:shadow-soft-dark dark:shadow-hairline-dark;
   }
   .card-hover {
-    @apply card transition-all duration-200
-      hover:shadow-medium hover:border-surface-300 hover:-translate-y-px
-      dark:hover:border-surface-700 dark:hover:shadow-lg;
+    @apply card transition-all duration-200 ease-swift
+      hover:shadow-elevated hover:border-surface-300 hover:-translate-y-0.5
+      dark:hover:border-surface-700 dark:hover:bg-surface-850 dark:hover:shadow-medium-dark;
   }
 
   /* ─── Sidebar Items ─── */
   .sidebar-item {
-    @apply flex items-center gap-3 rounded-lg px-3 py-[7px] text-[13px] text-surface-500
-      transition-all duration-150
-      hover:bg-surface-100 hover:text-surface-800
-      dark:text-surface-400 dark:hover:bg-surface-800/70 dark:hover:text-surface-200;
+    @apply relative flex items-center gap-3 rounded-lg px-3 py-[7px] text-[13px] font-medium
+      text-surface-500 transition-all duration-150 ease-swift
+      hover:bg-surface-100 hover:text-surface-900
+      dark:text-surface-400 dark:hover:bg-surface-800/70 dark:hover:text-surface-100;
   }
+  /* The active item carries a 3px brand rail on its leading edge. A filled
+     background alone competes with the page content for attention; a rail plus
+     a soft tint reads as "you are here" without shouting. */
   .sidebar-item-active {
-    @apply flex items-center gap-3 rounded-lg px-3 py-[7px] text-[13px]
-      bg-brand-50 text-brand-700 font-medium
-      dark:bg-brand-950/50 dark:text-brand-400;
+    @apply relative flex items-center gap-3 rounded-lg px-3 py-[7px] text-[13px]
+      bg-brand-50 text-brand-700 font-semibold
+      dark:bg-brand-500/10 dark:text-brand-300;
+  }
+  .sidebar-item-active::before {
+    content: '';
+    @apply absolute left-0 top-1/2 h-[18px] w-[3px] -translate-y-1/2 rounded-r-full bg-brand-600 dark:bg-brand-400;
   }
 
   /* ─── Badge ─── */
+  /* A hairline ring at low opacity gives badges a defined edge without a hard
+     border, so they sit on both white and tinted backgrounds cleanly. */
   .badge {
-    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium;
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium
+      ring-1 ring-inset;
+    letter-spacing: theme('letterSpacing.label');
+    font-variant-numeric: tabular-nums;
   }
   .badge-brand {
-    @apply badge bg-brand-50 text-brand-700 dark:bg-brand-950/50 dark:text-brand-400;
+    @apply badge bg-brand-50 text-brand-700 ring-brand-600/15
+      dark:bg-brand-500/10 dark:text-brand-300 dark:ring-brand-400/20;
   }
   .badge-neutral {
-    @apply badge bg-surface-100 text-surface-600 dark:bg-surface-800 dark:text-surface-400;
+    @apply badge bg-surface-100 text-surface-600 ring-surface-900/[0.06]
+      dark:bg-surface-800 dark:text-surface-300 dark:ring-white/10;
+  }
+  .badge-success {
+    @apply badge bg-success-50 text-success-700 ring-success-700/15
+      dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20;
+  }
+  .badge-warning {
+    @apply badge bg-warning-50 text-warning-700 ring-warning-700/15
+      dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20;
+  }
+  .badge-danger {
+    @apply badge bg-danger-50 text-danger-700 ring-danger-700/15
+      dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20;
   }
 
   /* ─── Divider ─── */
@@ -138,15 +230,20 @@
 
   /* ─── Dropdown ─── */
   .dropdown {
-    @apply rounded-xl border border-surface-200 bg-white shadow-overlay
-      dark:border-surface-700 dark:bg-surface-900
+    @apply rounded-xl border border-surface-200 bg-white p-1
+      shadow-overlay shadow-hairline
+      dark:border-surface-700 dark:bg-surface-850
+      dark:shadow-overlay-dark dark:shadow-hairline-dark
       animate-scale-in origin-top-right;
   }
+  /* Rounded items inset from a padded container, rather than full-bleed rows
+     with square corners — the hover target then echoes the panel's own radius
+     instead of fighting it. */
   .dropdown-item {
-    @apply flex items-center gap-2.5 px-3 py-2 text-sm text-surface-600
-      transition-colors cursor-pointer
-      hover:bg-surface-50 hover:text-surface-900
-      dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:text-surface-100;
+    @apply flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-sm text-surface-600
+      transition-colors duration-100 cursor-pointer
+      hover:bg-surface-100 hover:text-surface-900
+      dark:text-surface-400 dark:hover:bg-surface-750 dark:hover:text-surface-100;
   }
 
   /* ─── Skeleton Loader ─── */
@@ -179,13 +276,21 @@
     position: relative;
     word-break: normal;
   }
+  /* The cursor label is the most visible signal that collaboration is working,
+     so it is worth getting right: a rounded pill with a soft shadow reads as a
+     floating tag rather than a coloured rectangle, and fading in avoids the
+     flicker of labels popping on every remote keystroke. The label is squared
+     off at its bottom-left so it visually connects to the caret it belongs to. */
   .collaboration-cursor__label {
-    @apply rounded-sm px-1.5 py-0.5 text-2xs font-medium text-white whitespace-nowrap;
+    @apply rounded-md rounded-bl-none px-1.5 py-[3px] text-2xs font-semibold text-white whitespace-nowrap;
     position: absolute;
-    top: -1.4em;
+    top: -1.55em;
     left: -1px;
     user-select: none;
     pointer-events: none;
+    letter-spacing: theme('letterSpacing.label');
+    box-shadow: 0 2px 6px -1px rgb(16 24 40 / 0.25), inset 0 1px 0 0 rgb(255 255 255 / 0.20);
+    animation: fadeIn 0.12s ease-out;
   }
 
   /* ─── Status Dots ─── */
@@ -200,11 +305,47 @@
 
 @layer utilities {
   .text-balance { text-wrap: balance; }
+  .text-pretty  { text-wrap: pretty; }
   .animate-in { animation: fadeIn 0.15s ease-out; }
+
+  /* Frosted surfaces need a saturation boost as well as a blur — without it,
+     backdrop-filter desaturates whatever is behind and the panel looks grey and
+     dead rather than translucent. The border pair is what gives the glass an
+     edge in both themes. */
   .glass {
-    @apply bg-white/80 backdrop-blur-md dark:bg-surface-900/80;
+    @apply border-b border-surface-900/[0.06] bg-white/70 dark:border-white/[0.06] dark:bg-surface-900/70;
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
   }
+
   .border-subtle {
     @apply border-surface-200/80 dark:border-surface-800/80;
   }
+
+  /* Numbers that change in place — counters, metrics, timers — jitter badly
+     with proportional figures. */
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  /* Section labels: small, uppercase, tracked out. Used for sidebar group
+     headings and card eyebrows. */
+  .eyebrow {
+    @apply text-2xs font-semibold uppercase text-surface-400 dark:text-surface-500;
+    letter-spacing: 0.06em;
+  }
+
+  /* A gradient text treatment for the one or two places that genuinely warrant
+     emphasis — a landing headline or an empty-state title. Used sparingly;
+     applying it to every heading is what makes a UI look like a template. */
+  .text-gradient {
+    @apply bg-gradient-to-br from-surface-900 via-surface-800 to-surface-600 bg-clip-text text-transparent
+      dark:from-white dark:via-surface-100 dark:to-surface-400;
+  }
+
+  /* Hides scrollbars on horizontally scrollable strips (tab bars, chip rows)
+     where a visible bar adds noise but the content still needs to scroll. */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
 }

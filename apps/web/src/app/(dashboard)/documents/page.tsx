@@ -289,17 +289,58 @@ function DocumentCard({
       onClick={() => router.push(`/documents/${doc.id}`)}
       className="card-hover group relative cursor-pointer animate-fade-in"
     >
-      {/* Thumbnail area */}
-      <div className="flex h-36 items-center justify-center overflow-hidden rounded-t-xl bg-gradient-to-br from-surface-50 to-surface-100 dark:from-surface-800 dark:to-surface-850">
-        <div className="flex flex-col items-center gap-2 text-surface-300 dark:text-surface-600">
-          <FileText className="h-10 w-10" />
-          <div className="flex flex-col gap-1.5 px-8 w-full">
-            <div className="h-1.5 w-full rounded-full bg-surface-200 dark:bg-surface-700" />
-            <div className="h-1.5 w-5/6 rounded-full bg-surface-200 dark:bg-surface-700" />
-            <div className="h-1.5 w-4/6 rounded-full bg-surface-200 dark:bg-surface-700" />
-            <div className="h-1.5 w-3/4 rounded-full bg-surface-200 dark:bg-surface-700" />
+      {/* Thumbnail area.
+          Previously a large centred file icon on a flat wash, which left most
+          of the card as dead grey space and told you nothing about the
+          document. Now it renders a miniature page — a white sheet cropped at
+          the bottom so it reads as continuing below the fold, with a brand-
+          tinted heading rule and body lines. It communicates "document" without
+          an icon, and the sheet lifts on hover so the whole card feels live. */}
+      <div className="relative h-36 overflow-hidden rounded-t-xl bg-gradient-to-br from-surface-100 via-surface-50 to-surface-100 dark:from-surface-850 dark:via-surface-900 dark:to-surface-850">
+        {/* Faint grid, to give the empty area some texture rather than leaving
+            it a flat field. Very low contrast on purpose. */}
+        <div
+          aria-hidden
+          className="absolute inset-0 opacity-[0.5] dark:opacity-[0.35]"
+          style={{
+            backgroundImage:
+              'linear-gradient(to right, rgb(113 113 122 / 0.07) 1px, transparent 1px), linear-gradient(to bottom, rgb(113 113 122 / 0.07) 1px, transparent 1px)',
+            backgroundSize: '16px 16px',
+          }}
+        />
+
+        {/* The page itself */}
+        <div
+          aria-hidden
+          className="absolute inset-x-7 top-5 rounded-t-md border border-surface-200/90 bg-white px-3.5 pt-3.5
+            shadow-[0_4px_12px_-2px_rgb(16_24_40_/_0.10),0_1px_3px_rgb(16_24_40_/_0.06)]
+            transition-transform duration-300 ease-swift group-hover:-translate-y-1
+            dark:border-surface-700/70 dark:bg-surface-800
+            dark:shadow-[0_4px_14px_-2px_rgb(0_0_0_/_0.55)]"
+          style={{ height: 'calc(100% - 1.25rem)' }}
+        >
+          {/* Heading rule, tinted by status so the thumbnail carries a little
+              information rather than being purely decorative. */}
+          <div
+            className={cn(
+              'h-2 w-2/3 rounded-full',
+              doc.status === 'Published'
+                ? 'bg-brand-500/70 dark:bg-brand-400/60'
+                : 'bg-amber-400/70 dark:bg-amber-400/50',
+            )}
+          />
+          <div className="mt-3 space-y-[7px]">
+            <div className="h-1.5 w-full rounded-full bg-surface-200/90 dark:bg-surface-700" />
+            <div className="h-1.5 w-[92%] rounded-full bg-surface-200/90 dark:bg-surface-700" />
+            <div className="h-1.5 w-[78%] rounded-full bg-surface-200/90 dark:bg-surface-700" />
+            <div className="h-1.5 w-[85%] rounded-full bg-surface-200/70 dark:bg-surface-700/70" />
+            <div className="h-1.5 w-[60%] rounded-full bg-surface-200/50 dark:bg-surface-700/50" />
           </div>
         </div>
+
+        {/* Fade at the bottom edge so the sheet dissolves into the card instead
+            of ending on a hard line. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-surface-100 to-transparent dark:from-surface-850" />
       </div>
 
       {/* Status badge */}

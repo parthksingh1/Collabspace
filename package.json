@@ -38,20 +38,20 @@
     "docker:infra": "docker compose -f infra/docker/docker-compose.yml --project-directory . --env-file .env up -d postgres redis kafka zookeeper prometheus grafana jaeger"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.11.0",
+    "@types/pg": "^8.11.0",
+    "@types/ws": "^8.5.10",
+    "bcryptjs": "^2.4.3",
     "eslint": "^8.56.0",
+    "pg": "^8.11.0",
     "prettier": "^3.2.0",
+    "tsx": "^4.7.0",
     "turbo": "^2.0.0",
     "typescript": "^5.4.0",
-    "tsx": "^4.7.0",
     "ws": "^8.16.0",
-    "yjs": "^13.6.0",
-    "@types/ws": "^8.5.10",
-    "@playwright/test": "^1.44.0",
-    "pg": "^8.11.0",
-    "@types/pg": "^8.11.0",
-    "bcryptjs": "^2.4.3",
-    "@types/bcryptjs": "^2.4.6"
+    "yjs": "^13.6.0"
   },
   "engines": {
     "node": ">=20.0.0",
