@@ -6,6 +6,8 @@ import {
   totalConnections,
   heartbeatLatency,
   disconnectedByTimeout,
+  collabspaceWsConnectionsActive,
+  collabspaceWsMessagesTotal,
 } from './metrics.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -84,6 +86,7 @@ export class ConnectionManager {
     this.userConnections.get(userId)!.add(socketId);
 
     activeConnections.labels(config.shardId).inc();
+    collabspaceWsConnectionsActive.labels(config.shardId).inc();
     totalConnections.labels(config.shardId, 'connected').inc();
 
     logger.info('Connection added', { socketId, userId, total: this.connections.size });
@@ -111,6 +114,7 @@ export class ConnectionManager {
 
     this.connections.delete(socketId);
     activeConnections.labels(config.shardId).dec();
+    collabspaceWsConnectionsActive.labels(config.shardId).dec();
     totalConnections.labels(config.shardId, 'disconnected').inc();
 
     logger.info('Connection removed', { socketId, userId, total: this.connections.size });
@@ -242,22 +246,51 @@ export class ConnectionManager {
 
   // ── Broadcast helpers ─────────────────────────────────────────────────────
 
+  /**
+   * Extracts the type prefix for metric labelling: "doc:update" -> "doc".
+   * Prefixes are a bounded set (doc, code, wb, project, room, presence,
+   * connection, error, pong), so this cannot explode Prometheus cardinality.
+   */
+  private static messageTypeLabel(message: string): string {
+    // Cheap: read the type without parsing the whole envelope. Broadcast is on
+    // the hot path and every message here was serialised by us moments ago.
+    const match = /"type"\s*:\s*"([a-z_]+)/i.exec(message);
+    return match?.[1] ?? 'unknown';
+  }
+
   broadcastToRoom(roomId: string, message: string, excludeSocketId?: string): void {
     const sockets = this.getConnectionsByRoom(roomId);
+    let delivered = 0;
     for (const socket of sockets) {
       if (socket.meta.socketId === excludeSocketId) continue;
       if (socket.readyState === socket.OPEN) {
         socket.send(message);
+        delivered++;
       }
+    }
+    if (delivered > 0) {
+      // Counts actual deliveries, not broadcast calls — a broadcast to a room
+      // of 20 is 20 messages on the wire, and that is the number that matters
+      // for capacity.
+      collabspaceWsMessagesTotal
+        .labels('out', ConnectionManager.messageTypeLabel(message))
+        .inc(delivered);
     }
   }
 
   sendToUser(userId: string, message: string): void {
     const sockets = this.getConnectionsByUser(userId);
+    let delivered = 0;
     for (const socket of sockets) {
       if (socket.readyState === socket.OPEN) {
         socket.send(message);
+        delivered++;
       }
+    }
+    if (delivered > 0) {
+      collabspaceWsMessagesTotal
+        .labels('out', ConnectionManager.messageTypeLabel(message))
+        .inc(delivered);
     }
   }
 

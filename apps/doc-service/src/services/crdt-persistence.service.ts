@@ -3,6 +3,15 @@ import { query, getClient } from '../utils/db.js';
 import { getRedis } from '../utils/redis.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import {
+  crdtUpdatesTotal,
+  persistBatchesTotal,
+  persistDurationMs,
+  persistBatchSize,
+  pendingBatches,
+  snapshotsTotal,
+  documentLoadsTotal,
+} from '../metrics.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,6 +57,10 @@ export class CrdtPersistenceService {
       receivedAt: Date.now(),
     });
 
+    crdtUpdatesTotal.labels('document').inc();
+    // Everything in `batches` is in memory only until the debounce fires.
+    pendingBatches.set(this.batches.size);
+
     // Reset debounce timer
     if (batch.timer) {
       clearTimeout(batch.timer);
@@ -78,6 +91,10 @@ export class CrdtPersistenceService {
     if (batch.updates.length === 0) {
       this.batches.delete(documentId);
     }
+    pendingBatches.set(this.batches.size);
+
+    const persistStart = Date.now();
+    persistBatchSize.observe(updates.length);
 
     // Merge all updates into one for efficient storage
     const mergedDoc = new Y.Doc();
@@ -98,6 +115,7 @@ export class CrdtPersistenceService {
 
       if (versionResult.rows.length === 0) {
         await client.query('ROLLBACK');
+        persistBatchesTotal.labels('document_missing').inc();
         logger.warn('Document not found for batch persist', { documentId });
         return;
       }
@@ -127,9 +145,13 @@ export class CrdtPersistenceService {
 
       if (updatesSinceSnapshot >= config.snapshotThreshold) {
         await this.compactToSnapshot(client, documentId, newVersion);
+        snapshotsTotal.inc();
       }
 
       await client.query('COMMIT');
+
+      persistBatchesTotal.labels('success').inc();
+      persistDurationMs.observe(Date.now() - persistStart);
 
       logger.debug('Batch persisted', {
         documentId,
@@ -139,6 +161,11 @@ export class CrdtPersistenceService {
       });
     } catch (err) {
       await client.query('ROLLBACK');
+      // These updates are now lost from the persistence path: they were spliced
+      // out of the batch above and the transaction rolled back. They survive
+      // only in connected clients' Y.Docs. A nonzero rate here is data at risk.
+      persistBatchesTotal.labels('error').inc();
+      persistDurationMs.observe(Date.now() - persistStart);
       throw err;
     } finally {
       client.release();
@@ -156,6 +183,7 @@ export class CrdtPersistenceService {
 
     if (cachedState) {
       Y.applyUpdate(doc, new Uint8Array(cachedState));
+      documentLoadsTotal.labels('cache').inc();
       logger.debug('Document loaded from cache', { documentId });
       return doc;
     }
@@ -191,6 +219,7 @@ export class CrdtPersistenceService {
     const fullState = Y.encodeStateAsUpdate(doc);
     await redis.setex(`doc:${documentId}:state`, 300, Buffer.from(fullState));
 
+    documentLoadsTotal.labels('database').inc();
     logger.debug('Document loaded from DB', {
       documentId,
       snapshotVersion: baseVersion,

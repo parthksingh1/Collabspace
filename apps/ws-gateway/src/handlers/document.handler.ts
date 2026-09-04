@@ -3,7 +3,7 @@ import { ConnectionManager } from '../connection-manager.js';
 import { RoomManager } from '../room-manager.js';
 import { PresenceManager } from '../presence-manager.js';
 import { logger } from '../utils/logger.js';
-import { messagesReceived, messagesSent } from '../metrics.js';
+import { messagesReceived, messagesSent, collabspaceCrdtUpdatesTotal } from '../metrics.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -81,6 +81,14 @@ export async function handleDocumentMessage(
   const presenceManager = PresenceManager.getInstance();
 
   messagesReceived.labels(message.type, 'document').inc();
+
+  // Count only messages that actually carry a CRDT payload. Cursor and
+  // awareness messages travel the same path but are not CRDT updates, and
+  // folding them in would make this counter useless for reasoning about
+  // document write volume — cursors move far more often than text changes.
+  if (message.type === 'doc:update' || message.type === 'doc:sync:step2') {
+    collabspaceCrdtUpdatesTotal.labels('document').inc();
+  }
 
   switch (message.type) {
     case 'doc:sync:step1': {

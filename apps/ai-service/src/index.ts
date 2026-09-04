@@ -5,6 +5,7 @@ import { logger } from './utils/logger';
 import { aiRoutes } from './routes/ai.routes';
 import { agentRoutes } from './routes/agent.routes';
 import { memoryRoutes } from './routes/memory.routes';
+import { registry } from './metrics';
 
 const app = express();
 
@@ -18,6 +19,15 @@ app.use((req, _res, next) => {
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'healthy', service: 'ai-service', timestamp: new Date().toISOString() });
+});
+
+app.get('/metrics', async (_req, res) => {
+  try {
+    res.setHeader('Content-Type', registry.contentType);
+    res.end(await registry.metrics());
+  } catch (err) {
+    res.status(500).end((err as Error).message);
+  }
 });
 
 app.use('/ai', aiRoutes);

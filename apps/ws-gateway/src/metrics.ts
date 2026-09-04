@@ -111,3 +111,65 @@ export const crossShardDropped = new Counter({
   labelNames: ['reason'] as const,
   registers: [registry],
 });
+
+// ── collabspace_* canonical metrics ───────────────────────────────────────────
+//
+// The ws_* metrics above predate these and are kept so existing dashboards and
+// alerts do not break. These are the names the Grafana dashboard in
+// infra/grafana/dashboards/collabspace.json queries, and the ones documented as
+// the public contract.
+//
+// Every metric here is incremented from a real code path. Nothing is declared
+// speculatively — if a metric exists, something increments it, and the wiring
+// point is named in the comment.
+
+/** Incremented/decremented in ConnectionManager.addConnection/removeConnection. */
+export const collabspaceWsConnectionsActive = new Gauge({
+  name: 'collabspace_ws_connections_active',
+  help: 'WebSocket connections currently held by this gateway node',
+  labelNames: ['shard'] as const,
+  registers: [registry],
+});
+
+/**
+ * direction: "in" for client→server, "out" for server→client.
+ * type: the message type prefix (doc, code, wb, project, room, presence, ...).
+ *
+ * Incremented in index.ts processMessage() for inbound and in
+ * ConnectionManager.broadcastToRoom/sendToUser for outbound.
+ */
+export const collabspaceWsMessagesTotal = new Counter({
+  name: 'collabspace_ws_messages_total',
+  help: 'WebSocket messages by direction and type',
+  labelNames: ['direction', 'type'] as const,
+  registers: [registry],
+});
+
+/**
+ * doc_type: document | code | whiteboard | project.
+ * Incremented in each handler when a CRDT update crosses the gateway.
+ */
+export const collabspaceCrdtUpdatesTotal = new Counter({
+  name: 'collabspace_crdt_updates_total',
+  help: 'CRDT updates relayed, by collaboration surface. Only document and code carry Yjs payloads; whiteboard and project relay discrete JSON ops and are deliberately not counted here.',
+  labelNames: ['doc_type'] as const,
+  registers: [registry],
+});
+
+/**
+ * Server-side handling time for a message, in milliseconds: parse, route,
+ * handler, local fanout, and the cross-shard publish call.
+ *
+ * NOT end-to-end sync latency. It does not include either network hop, and it
+ * cannot — the gateway has no clock shared with the client. End-to-end
+ * convergence is measured by benchmarks/crdt-sync-latency.ts instead. The name
+ * is the one specified for the dashboard contract; this comment is here so
+ * nobody reads a panel of it as user-perceived latency.
+ */
+export const collabspaceSyncLatencyMs = new Histogram({
+  name: 'collabspace_sync_latency_ms',
+  help: 'Server-side message handling time in ms (not end-to-end sync latency)',
+  labelNames: ['type'] as const,
+  buckets: [0.5, 1, 2.5, 5, 10, 25, 50, 100, 250, 500, 1000],
+  registers: [registry],
+});

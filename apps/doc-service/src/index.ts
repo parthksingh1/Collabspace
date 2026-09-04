@@ -8,6 +8,7 @@ import { startConsumer, stopConsumer } from './kafka/consumer.js';
 import { disconnectProducer } from './kafka/producer.js';
 import { closeRedis } from './utils/redis.js';
 import { closePool } from './utils/db.js';
+import { registry } from './metrics.js';
 
 // ── Express app ─────────────────────────────────────────────────────────────
 
@@ -47,6 +48,17 @@ app.get('/health', (_req: Request, res: Response) => {
     service: 'doc-service',
     timestamp: new Date().toISOString(),
   });
+});
+
+// ── Prometheus metrics ──────────────────────────────────────────────────────
+
+app.get('/metrics', async (_req: Request, res: Response) => {
+  try {
+    res.setHeader('Content-Type', registry.contentType);
+    res.end(await registry.metrics());
+  } catch (err) {
+    res.status(500).end((err as Error).message);
+  }
 });
 
 // ── Routes ──────────────────────────────────────────────────────────────────

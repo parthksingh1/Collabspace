@@ -14,7 +14,13 @@ import { handleDocumentMessage } from './handlers/document.handler.js';
 import { handleCodeMessage } from './handlers/code.handler.js';
 import { handleWhiteboardMessage } from './handlers/whiteboard.handler.js';
 import { handleProjectMessage } from './handlers/project.handler.js';
-import { registry, messagesReceived, messageLatency } from './metrics.js';
+import {
+  registry,
+  messagesReceived,
+  messageLatency,
+  collabspaceWsMessagesTotal,
+  collabspaceSyncLatencyMs,
+} from './metrics.js';
 
 // ── Globals ───────────────────────────────────────────────────────────────────
 
@@ -199,12 +205,13 @@ rateLimiter.onDrain = (connectionId: string, message: string) => {
 // ── Message processing ────────────────────────────────────────────────────────
 
 function processMessage(socket: AuthenticatedSocket, raw: string): void {
-  const startTime = Date.now();
+  const startTime = performance.now();
 
   let parsed: { type: string; [key: string]: unknown };
   try {
     parsed = JSON.parse(raw) as { type: string };
   } catch {
+    collabspaceWsMessagesTotal.labels('in', 'unparseable').inc();
     const errorMsg = JSON.stringify({ type: 'error:parse', message: 'Invalid JSON' });
     if (socket.readyState === socket.OPEN) {
       socket.send(errorMsg);
@@ -223,13 +230,17 @@ function processMessage(socket: AuthenticatedSocket, raw: string): void {
     return;
   }
 
+  const typeLabel = parsed.type.split(':')[0] ?? 'unknown';
+  collabspaceWsMessagesTotal.labels('in', typeLabel).inc();
+
   // Route messages
   const handler = routeMessage(socket, parsed);
   if (handler) {
     handler
       .then(() => {
-        const elapsed = (Date.now() - startTime) / 1000;
-        messageLatency.labels(parsed.type.split(':')[0]!).observe(elapsed);
+        const elapsedMs = performance.now() - startTime;
+        messageLatency.labels(typeLabel).observe(elapsedMs / 1000);
+        collabspaceSyncLatencyMs.labels(typeLabel).observe(elapsedMs);
       })
       .catch((err) => {
         logger.error('Message handler error', {

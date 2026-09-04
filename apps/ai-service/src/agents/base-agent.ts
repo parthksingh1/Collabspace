@@ -3,6 +3,15 @@ import { toolRegistry, ToolContext, ToolResult } from '../tools/tool-registry.js
 import { LLMMessage, LLMOptions, ToolCall, ToolDefinition } from '../providers/base-provider.js';
 import { logger } from '../utils/logger.js';
 import { config } from '../config.js';
+import {
+  agentCallsTotal,
+  agentDurationMs,
+  agentIterations,
+  agentsRunning,
+  aiTokensUsedTotal,
+  aiTokensByKind,
+  toolCallsTotal,
+} from '../metrics.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,6 +99,7 @@ export abstract class BaseAgent {
 
     const response = await aiRouter.chat(this.messages, options, this.taskType, context.userId);
     this.tokensUsed += response.usage.totalTokens;
+    this.recordTokens(response.model, response.usage);
 
     // Store assistant response
     this.messages.push({
@@ -129,6 +139,8 @@ export abstract class BaseAgent {
         action.toolArgs ?? {},
         toolContext,
       );
+
+      toolCallsTotal.labels(action.toolName, result.success ? 'success' : 'error').inc();
 
       const resultStr = JSON.stringify(result.data ?? result.error, null, 2);
 
@@ -181,7 +193,24 @@ Return a numbered list of steps.`;
     );
 
     this.tokensUsed += response.usage.totalTokens;
+    this.recordTokens(response.model, response.usage);
     return response.content;
+  }
+
+  /**
+   * Records provider-reported token usage.
+   *
+   * Called from both think() and plan(), because the planning call is a real
+   * LLM round trip and omitting it would understate every agent's cost by one
+   * call per run.
+   */
+  private recordTokens(
+    model: string,
+    usage: { promptTokens: number; completionTokens: number; totalTokens: number },
+  ): void {
+    aiTokensUsedTotal.labels(model, this.type).inc(usage.totalTokens);
+    aiTokensByKind.labels(model, this.type, 'prompt').inc(usage.promptTokens);
+    aiTokensByKind.labels(model, this.type, 'completion').inc(usage.completionTokens);
   }
 
   // -----------------------------------------------------------------------
@@ -195,6 +224,9 @@ Return a numbered list of steps.`;
     this.messages = [];
     this.tokensUsed = 0;
     this.cancelled = false;
+
+    // Decremented in buildResult(), which every exit path goes through.
+    agentsRunning.labels(this.type).inc();
 
     logger.info(`Agent [${this.name}] starting`, { id: this.id, goal: goal.slice(0, 200) });
 
@@ -285,15 +317,42 @@ Return a numbered list of steps.`;
     return toolRegistry.getDefinitions(this.type);
   }
 
+  /**
+   * Every exit path of run() funnels through here, which makes it the one
+   * correct place to record terminal metrics — instrumenting each `return`
+   * separately would guarantee that a future exit path gets missed.
+   */
   private buildResult(success: boolean, output: string, startTime: number, error?: string): AgentResult {
+    const durationMs = Date.now() - startTime;
+
+    agentCallsTotal.labels(this.type, this.terminalStatus(success, error)).inc();
+    agentDurationMs.labels(this.type, this.terminalStatus(success, error)).observe(durationMs);
+    agentIterations.labels(this.type).observe(this.steps.length);
+    agentsRunning.labels(this.type).dec();
+
     return {
       success,
       output,
       steps: [...this.steps],
-      totalDurationMs: Date.now() - startTime,
+      totalDurationMs: durationMs,
       tokensUsed: this.tokensUsed,
       error,
     };
+  }
+
+  /**
+   * Maps an outcome onto the `status` label.
+   *
+   * "max_iterations" is kept distinct from "error" on purpose: the agent ran
+   * cleanly but never converged on an answer, which points at the prompt or a
+   * tool loop rather than at a provider or infrastructure failure. Collapsing
+   * the two would hide the difference on exactly the dashboard where it matters.
+   */
+  private terminalStatus(success: boolean, error?: string): string {
+    if (success) return 'success';
+    if (this.status === 'cancelled') return 'cancelled';
+    if (error === 'Maximum iterations reached') return 'max_iterations';
+    return 'error';
   }
 
   getStatus(): {

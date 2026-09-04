@@ -2,7 +2,7 @@ import type { AuthenticatedSocket } from '../connection-manager.js';
 import { RoomManager } from '../room-manager.js';
 import { PresenceManager } from '../presence-manager.js';
 import { logger } from '../utils/logger.js';
-import { messagesReceived, messagesSent } from '../metrics.js';
+import { messagesReceived, messagesSent, collabspaceCrdtUpdatesTotal } from '../metrics.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -89,6 +89,12 @@ export async function handleCodeMessage(
   const presenceManager = PresenceManager.getInstance();
 
   messagesReceived.labels(message.type, 'code').inc();
+
+  // Only `code:update` carries a CRDT payload. Cursor, execution and terminal
+  // messages share this path but are not document mutations.
+  if (message.type === 'code:update') {
+    collabspaceCrdtUpdatesTotal.labels('code').inc();
+  }
 
   switch (message.type) {
     case 'code:sync:step1': {
