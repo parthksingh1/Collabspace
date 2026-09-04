@@ -1,0 +1,185 @@
+name: Benchmark Smoke
+
+# A 30-second version of the real benchmarks, nightly.
+#
+# Purpose and non-purpose, stated up front because benchmark numbers from CI are
+# the easiest thing in the world to misuse:
+#
+#   PURPOSE: catch the harness rotting. A k6 script that no longer parses, a
+#   protocol change that breaks the load generator, a benchmark that silently
+#   stops connecting — all of that is invisible until someone tries to run a
+#   benchmark under pressure and finds it broken. This makes that visible daily.
+#
+#   NOT THE PURPOSE: producing performance numbers anyone should quote. GitHub's
+#   shared runners are noisy multi-tenant VMs with unpredictable neighbours;
+#   run-to-run variance swamps any real regression at this scale. The artifacts
+#   this uploads are diagnostic, not evidence.
+#
+# Real numbers come from a controlled machine, following the methodology in
+# benchmarks/RESULTS.md.
+
+on:
+  schedule:
+    # 03:00 UTC daily. Off-peak for the shared runner pool, which marginally
+    # reduces the noise this cannot otherwise control for.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: "Hold duration at peak (k6 duration string)"
+        required: false
+        default: "30s"
+      target_vus:
+        description: "Peak virtual users for the WebSocket benchmark"
+        required: false
+        default: "200"
+
+concurrency:
+  group: bench-smoke
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  JWT_SECRET: bench-smoke-secret
+
+jobs:
+  bench-smoke:
+    name: Benchmark Smoke (30s)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update -qq
+          sudo apt-get install -y k6
+          k6 version
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --legacy-peer-deps
+
+      - name: Raise file descriptor limit
+        # Even a few hundred WebSocket connections will hit the default soft
+        # limit of 1024. Without this the benchmark fails on EMFILE and looks
+        # like a gateway problem.
+        run: ulimit -n 65535 || true
+
+      - name: Start ws-gateway
+        run: |
+          npx tsx apps/ws-gateway/src/index.ts > /tmp/ws-gateway.log 2>&1 &
+          echo $! > /tmp/ws-gateway.pid
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:4001/health > /dev/null; then
+              echo "ws-gateway is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "ws-gateway failed to start"
+          cat /tmp/ws-gateway.log
+          exit 1
+        env:
+          PORT: "4001"
+          SHARD_ID: bench-shard-1
+          NODE_ENV: test
+          LOG_LEVEL: warn
+          REDIS_URL: redis://localhost:6379
+
+      # ── WebSocket load ────────────────────────────────────────────────────
+      #
+      # Deliberately small: 200 VUs, 30s hold. This is a smoke test of the
+      # harness. Thresholds are disabled with --no-thresholds because a shared
+      # runner will trip latency assertions for reasons that have nothing to do
+      # with the code, and a nightly job that cries wolf gets muted.
+      - name: WebSocket load (smoke)
+        continue-on-error: true
+        run: |
+          k6 run --no-thresholds \
+            --summary-trend-stats "min,med,p(95),p(99),max" \
+            benchmarks/websocket-load.js
+        env:
+          WS_URL: ws://localhost:4001
+          TARGET_VUS: ${{ github.event.inputs.target_vus || '200' }}
+          DURATION_HOLD: ${{ github.event.inputs.duration || '30s' }}
+          SESSION_MS: "15000"
+          DOC_COUNT: "20"
+
+      # ── CRDT convergence ──────────────────────────────────────────────────
+      #
+      # This one is NOT continue-on-error. It asserts that every peer's document
+      # converges to identical content, which is a correctness property and does
+      # not depend on runner speed. If this fails, something is genuinely wrong.
+      - name: CRDT convergence latency
+        run: npm run bench:crdt
+        env:
+          WS_URL: ws://localhost:4001
+          PEER_COUNTS: "2,4,8"
+          EDITS: "25"
+          WARMUP: "5"
+
+      - name: ws-gateway logs
+        if: always()
+        run: tail -100 /tmp/ws-gateway.log || true
+
+      - name: Stop ws-gateway
+        if: always()
+        run: kill "$(cat /tmp/ws-gateway.pid)" 2>/dev/null || true
+
+      - name: Annotate results as non-authoritative
+        if: always()
+        run: |
+          {
+            echo "## Benchmark smoke run"
+            echo ""
+            echo "These numbers come from a **shared GitHub-hosted runner** and are"
+            echo "diagnostic only. Run-to-run variance on shared infrastructure"
+            echo "swamps real regressions at this scale."
+            echo ""
+            echo "This job exists to catch the benchmark harness breaking, not to"
+            echo "measure performance. Authoritative numbers come from a controlled"
+            echo "machine following \`benchmarks/RESULTS.md\`."
+            echo ""
+            if [ -f benchmarks/results/crdt-sync.md ]; then
+              echo "### CRDT convergence"
+              echo ""
+              sed -n '/^| Peers/,/^$/p' benchmarks/results/crdt-sync.md || true
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-smoke-results-${{ github.run_number }}
+          path: |
+            benchmarks/results/
+            /tmp/ws-gateway.log
+          retention-days: 30
+          if-no-files-found: warn

@@ -63,16 +63,19 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund --legacy-peer-deps
 
-      - name: Run typecheck across workspaces
-        run: |
-          for pkg in apps/* packages/*; do
-            if [ -f "$pkg/package.json" ]; then
-              name=$(node -p "require('./$pkg/package.json').name")
-              echo "::group::Typecheck $name"
-              (cd "$pkg" && npm run typecheck --if-present) || echo "[warn] $name typecheck issues"
-              echo "::endgroup::"
-            fi
-          done
+      # Runs tsc for real and compares against .github/typecheck-baseline.json.
+      # Fails only if a package has MORE errors than its recorded baseline.
+      #
+      # The packages' own `typecheck` scripts end in `|| echo "non-blocking"`,
+      # which means 93 existing errors are invisible and nothing stops a PR
+      # adding the 94th. Turning strict enforcement on outright would leave CI
+      # permanently red, and a red build everyone ignores is worse than none.
+      # The ratchet blocks new errors while making the existing ones visible in
+      # the job summary. Baselines only move down.
+      #
+      # See docs/LIMITATIONS.md for why the 93 exist.
+      - name: TypeScript error ratchet
+        run: node scripts/typecheck-ratchet.cjs
 
   # ─────────────────────────── Test ───────────────────────────────────────────
   test:
@@ -111,6 +114,138 @@ jobs:
         env:
           NODE_ENV: test
 
+  # ─────────────────────── Integration Tests ──────────────────────────────────
+  #
+  # Runs the CRDT convergence and offline reconciliation suites against a real
+  # ws-gateway backed by a real Redis.
+  #
+  # REQUIRE_INFRA=1 is the important part: without it these tests SKIP when
+  # infrastructure is missing, which would let this job pass green having run
+  # nothing at all. With it, a missing service is a hard failure.
+  #
+  # PR-triggered runs execute the layer that needs no infrastructure (11 CRDT
+  # semantics tests). Pushes to main bring up the gateway and run all 17.
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck]
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      JWT_SECRET: ci-integration-secret
+      REDIS_URL: redis://localhost:6379
+      WS_URL: ws://localhost:4001
+      WS_HTTP_URL: http://localhost:4001
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --legacy-peer-deps
+
+      # On pull requests, run only the tests that need nothing running. They are
+      # the ones that catch a broken CRDT assumption, and they are fast.
+      - name: CRDT semantics (no infrastructure)
+        if: github.event_name == 'pull_request'
+        run: npm run test:integration
+
+      - name: Start ws-gateway
+        if: github.event_name == 'push'
+        run: |
+          npx tsx apps/ws-gateway/src/index.ts > /tmp/ws-gateway.log 2>&1 &
+          echo $! > /tmp/ws-gateway.pid
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:4001/health > /dev/null; then
+              echo "ws-gateway is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "ws-gateway failed to start"
+          cat /tmp/ws-gateway.log
+          exit 1
+        env:
+          PORT: "4001"
+          SHARD_ID: ci-shard-1
+          NODE_ENV: test
+          LOG_LEVEL: warn
+
+      - name: Integration tests (against live gateway)
+        if: github.event_name == 'push'
+        run: npm run test:integration
+        env:
+          REQUIRE_INFRA: "1"
+
+      - name: ws-gateway logs
+        if: failure()
+        run: cat /tmp/ws-gateway.log || true
+
+      - name: Stop ws-gateway
+        if: always() && github.event_name == 'push'
+        run: kill "$(cat /tmp/ws-gateway.pid)" 2>/dev/null || true
+
+  # ─────────────────────────── Chaos Tests ────────────────────────────────────
+  #
+  # Two-node gateway topology in Docker: kill a node with 100 clients attached,
+  # restart Redis mid-session. Only on pushes to main — it builds an image and
+  # takes a couple of minutes, which is too slow for every PR.
+  chaos:
+    name: Chaos Tests
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck]
+    if: github.event_name == 'push'
+    timeout-minutes: 25
+
+    env:
+      JWT_SECRET: ci-chaos-secret
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --legacy-peer-deps
+
+      - name: Run chaos suites
+        run: npm run test:chaos
+        env:
+          REQUIRE_INFRA: "1"
+
+      - name: Chaos topology logs
+        if: failure()
+        run: |
+          docker compose -p collabspace-chaos \
+            -f tests/chaos/docker-compose.chaos.yml logs --tail 200 || true
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose -p collabspace-chaos \
+            -f tests/chaos/docker-compose.chaos.yml down -v || true
+
   # ─────────────────────────── Build ──────────────────────────────────────────
   build:
     name: Build
@@ -140,16 +275,36 @@ jobs:
   summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, build]
+    needs: [lint, typecheck, test, integration, chaos, build]
     if: always()
     steps:
       - name: Report
         run: |
-          echo "## CollabSpace CI Results"
-          echo ""
-          echo "| Job | Status |"
-          echo "| --- | --- |"
-          echo "| Lint | ${{ needs.lint.result }} |"
-          echo "| Type Check | ${{ needs.typecheck.result }} |"
-          echo "| Test | ${{ needs.test.result }} |"
-          echo "| Build | ${{ needs.build.result }} |"
+          {
+            echo "## CollabSpace CI Results"
+            echo ""
+            echo "| Job | Status |"
+            echo "| --- | --- |"
+            echo "| Lint | ${{ needs.lint.result }} |"
+            echo "| Type Check (ratchet) | ${{ needs.typecheck.result }} |"
+            echo "| Unit Tests | ${{ needs.test.result }} |"
+            echo "| Integration Tests | ${{ needs.integration.result }} |"
+            echo "| Chaos Tests | ${{ needs.chaos.result }} |"
+            echo "| Build | ${{ needs.build.result }} |"
+            echo ""
+            echo "Chaos tests run on pushes to main only; 'skipped' is expected on a pull request."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The summary job must fail when a needed job failed, or a red pipeline
+      # reports green on the commit and the badge lies.
+      - name: Fail if any job failed
+        if: >-
+          needs.lint.result == 'failure' ||
+          needs.typecheck.result == 'failure' ||
+          needs.test.result == 'failure' ||
+          needs.integration.result == 'failure' ||
+          needs.chaos.result == 'failure' ||
+          needs.build.result == 'failure'
+        run: |
+          echo "One or more CI jobs failed. See the summary table above."
+          exit 1

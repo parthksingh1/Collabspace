@@ -10,6 +10,17 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/parthksingh1/Collabspace/actions/workflows/ci.yml"><img src="https://github.com/parthksingh1/Collabspace/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"/></a>
+  <a href="https://github.com/parthksingh1/Collabspace/actions/workflows/bench-smoke.yml"><img src="https://github.com/parthksingh1/Collabspace/actions/workflows/bench-smoke.yml/badge.svg" alt="Benchmark Smoke"/></a>
+</p>
+
+<!-- These badges report the live status of the real workflows in this repo.
+     They are not pinned to a passing run and will go red if main breaks, which
+     is the only kind of badge worth having. As of this commit the workflows
+     have been rewritten but not yet run on GitHub, so the badge shows whatever
+     the next push produces — verify it before relying on it. -->
+
+<p align="center">
   <img src="https://img.shields.io/badge/TypeScript-5.4-blue?logo=typescript" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/Next.js-14-black?logo=next.js" alt="Next.js"/>
   <img src="https://img.shields.io/badge/Node.js-20+-green?logo=node.js" alt="Node.js"/>

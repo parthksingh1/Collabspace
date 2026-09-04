@@ -1,0 +1,17 @@
+{
+  "apps/ai-service": 7,
+  "apps/all-in-one": 0,
+  "apps/api-gateway": 0,
+  "apps/auth-service": 0,
+  "apps/board-service": 18,
+  "apps/code-service": 11,
+  "apps/doc-service": 0,
+  "apps/notification-service": 16,
+  "apps/project-service": 32,
+  "apps/web": 0,
+  "apps/ws-gateway": 0,
+  "packages/ai-sdk": 8,
+  "packages/crdt": 1,
+  "packages/shared": 0,
+  "packages/ui": 0
+}
