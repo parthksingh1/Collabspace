@@ -480,7 +480,8 @@ Access Grafana at `http://localhost:3001` (auto-provisioned dashboards).
 | [README.md](README.md) | This file — project overview and quick start |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture deep-dive |
 | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | Complete API endpoint documentation |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deployment guide (Docker, K8s, Terraform) |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | Cheapest path to a live demo — Vercel + Render + Supabase + Upstash |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Production deployment guide (Docker, K8s, Terraform) |
 | [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Development workflow and guidelines |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security model and policies |
 | [docs/INTERNALS.md](docs/INTERNALS.md) | How the CRDT layer works — Yjs internals, awareness, persistence, wire format |

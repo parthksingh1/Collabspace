@@ -25,6 +25,88 @@ including future me.
 
 ---
 
+## 0. Bringing the stack up from a clean checkout
+
+Verified on 2026-09-04 by cloning into an empty directory and following exactly
+these steps. Several things were broken and are now fixed; the manual steps that
+remain are listed at the end.
+
+```bash
+git clone <repo> && cd collabspace
+npm install --legacy-peer-deps
+cp .env.example .env          # one copy, at the repo root — that is all
+npm run docker:up
+```
+
+**Always use the npm scripts rather than calling `docker compose` directly.**
+They pass two flags that the compose file cannot work without:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml \
+  --project-directory . --env-file .env up -d
+```
+
+`--project-directory .` is what makes both `env_file: .env` and `${VAR}`
+interpolation resolve from the repo root. These are two separate mechanisms and
+both need it: `env_file` sets variables *inside* containers, while `${VAR}`
+substitution is done by Compose itself and reads only the shell environment and
+`--env-file`. Without the flags Compose looks for `infra/docker/.env`, which
+`.gitignore` excludes, and you get:
+
+```
+error while interpolating services.postgres.environment.POSTGRES_PASSWORD:
+required variable POSTGRES_PASSWORD is missing a value
+```
+
+### Seed the demo data
+
+An empty instance looks broken. After the database is up:
+
+```bash
+npm run db:seed:demo
+```
+
+Two users, three documents with real content (including working Yjs CRDT state,
+so the editor opens with text rather than blank), a twelve-task kanban board and
+a whiteboard. Idempotent, with deterministic ids so demo URLs stay stable.
+`npm run db:seed:demo:reset` wipes and re-creates.
+
+### Manual steps that remain
+
+- **`npm install` before seeding.** `scripts/seed-demo.ts` needs `pg`, `bcryptjs`
+  and `yjs` from `node_modules`.
+- **The schema may need applying by hand.** Postgres auto-runs
+  `infra/docker/init-db.sql` on first boot of an empty volume. If you are
+  attaching to an existing volume, or using Supabase, apply the schema yourself:
+  ```bash
+  docker compose -f infra/docker/docker-compose.yml --project-directory . \
+    exec -T postgres psql -U collabspace -d collabspace < infra/supabase/init.sql
+  ```
+- **Port conflicts are the most common failure.** 5432, 6379, 3000 and 9092 are
+  all popular. Every port is overridable in `.env` (`POSTGRES_PORT`,
+  `REDIS_PORT`, `WEB_PORT`, …) — change it there rather than editing compose.
+- **AI features need a key.** `GEMINI_API_KEY` in `.env`. Without one the AI
+  service starts and its endpoints fail; nothing else is affected.
+- **Kafka is slow to become healthy** — allow a couple of minutes on first run.
+  Services that depend on it wait, so the stack will look stalled before it
+  isn't.
+
+### Problems found during this verification, now fixed
+
+Recorded because each one broke `docker compose up` completely, and because the
+same mistakes are easy to reintroduce:
+
+| Problem | Effect |
+|---|---|
+| `--requirepass ${REDIS_PASSWORD:-}` with an empty password | Redis crash-looped with `FATAL CONFIG FILE ERROR ... 'requirepass' wrong number of arguments`. Almost everything declares `depends_on: redis: service_healthy`, so the entire stack never started. This was the single biggest barrier. |
+| `env_file: .env` resolving to `infra/docker/.env` | A gitignored path nothing tells you to create. Worked only on machines where it happened to exist. |
+| `POSTGRES_PASSWORD` missing from `.env.example`, with no default in compose | Hard failure at config parse time. 32 other compose variables were also absent. |
+| `Dockerfile.service` copying `packages/types`, `config`, `logger`, `database` | None exist. Image build failed. |
+| `CMD ["node", "apps/${SERVICE_NAME}/dist/main.js"]` | Exec form does not expand variables, and the entrypoint is `index.js`, not `main.js`. |
+| `wget --spider` health checks | Sends HEAD; handlers only match GET, so healthy services reported unhealthy and `depends_on: service_healthy` stalled. |
+
+---
+
 ## 1. Where state lives
 
 You cannot debug this system without knowing which copy of the truth you're

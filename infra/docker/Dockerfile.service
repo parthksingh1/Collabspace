@@ -15,10 +15,9 @@ COPY package.json package-lock.json turbo.json ./
 
 # Copy all package.json files to leverage Docker layer caching
 COPY packages/shared/package.json ./packages/shared/
-COPY packages/types/package.json ./packages/types/
-COPY packages/config/package.json ./packages/config/
-COPY packages/logger/package.json ./packages/logger/
-COPY packages/database/package.json ./packages/database/
+COPY packages/crdt/package.json ./packages/crdt/
+COPY packages/ai-sdk/package.json ./packages/ai-sdk/
+COPY packages/ui/package.json ./packages/ui/
 
 ARG SERVICE_NAME
 COPY apps/${SERVICE_NAME}/package.json ./apps/${SERVICE_NAME}/
@@ -90,12 +89,24 @@ EXPOSE 4000
 # Use dumb-init to handle PID 1 properly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the service
-CMD ["node", "apps/${SERVICE_NAME}/dist/main.js"]
+# Start the service.
+#
+# Exec form (a JSON array) does NOT expand shell variables, so the previous
+# `CMD ["node", "apps/${SERVICE_NAME}/dist/main.js"]` tried to run a file
+# literally named `apps/${SERVICE_NAME}/dist/main.js`. The entrypoint is also
+# `dist/index.js`, not `dist/main.js` — every service builds from `src/index.ts`.
+# Shell form is used here precisely so ${SERVICE_NAME} expands at runtime.
+CMD node "apps/${SERVICE_NAME}/dist/index.js"
 
-# Health check
+# Health check.
+#
+# `wget --spider` sends a HEAD request. Every service's handler matches on
+# `req.method === 'GET'`, so a spider probe falls through to the 404 branch and
+# the container is reported unhealthy while serving perfectly well. Because
+# docker-compose.yml uses `depends_on: condition: service_healthy`, that stalls
+# the entire stack. Use a real GET and discard the body.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-4000}/health || exit 1
+    CMD wget --no-verbose --tries=1 -O /dev/null "http://localhost:${PORT:-4000}/health" || exit 1
 
 LABEL maintainer="CollabSpace Team <team@collabspace.io>"
 LABEL org.opencontainers.image.source="https://github.com/collabspace/collabspace"

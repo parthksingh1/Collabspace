@@ -1,10 +1,25 @@
-version: "3.9"
-
 x-service-defaults: &service-defaults
   restart: unless-stopped
   networks:
     - collabspace
   env_file:
+    # Resolved against Compose's PROJECT DIRECTORY, not this file's directory.
+    #
+    # Always invoke this compose file with `--project-directory .` from the repo
+    # root, which the npm scripts do:
+    #
+    #   docker compose -f infra/docker/docker-compose.yml \
+    #     --project-directory . --env-file .env up -d
+    #
+    # Two separate mechanisms need that root .env and both are easy to get
+    # wrong: `env_file` sets variables INSIDE containers, while `${VAR}`
+    # interpolation in this file is resolved by Compose itself and reads only
+    # the shell environment and --env-file. Without the flags, Compose looks for
+    # infra/docker/.env — a path .gitignore excludes and the quick start never
+    # tells anyone to create — and a fresh clone fails with
+    # "required variable POSTGRES_PASSWORD is missing a value".
+    #
+    # Use `npm run docker:up` rather than calling compose directly.
     - .env
   logging:
     driver: json-file
@@ -48,7 +63,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:4000/health"]
     depends_on:
       redis:
         condition: service_healthy
@@ -78,7 +93,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4001/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:4001/health"]
     depends_on:
       redis:
         condition: service_healthy
@@ -114,7 +129,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4002/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:4002/health"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -145,7 +160,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4003/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:4003/health"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -176,7 +191,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4004/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:4004/health"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -207,7 +222,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4005/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:4005/health"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -238,7 +253,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4006/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:4006/health"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -274,7 +289,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4007/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:4007/health"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -309,7 +324,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4008/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:4008/health"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -334,7 +349,7 @@ services:
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:3000/api/health"]
     depends_on:
       api-gateway:
         condition: service_healthy
@@ -374,13 +389,33 @@ services:
     restart: unless-stopped
     ports:
       - "${REDIS_PORT:-6379}:6379"
+    # No --requirepass. It used to read `--requirepass ${REDIS_PASSWORD:-}`,
+    # which on a fresh clone (where REDIS_PASSWORD is empty) expands to
+    # `--requirepass` with no argument. Redis treats that as a fatal config
+    # error and crash-loops:
+    #
+    #   *** FATAL CONFIG FILE ERROR (Redis 7.4.8) ***
+    #   >>> 'requirepass'
+    #   wrong number of arguments
+    #
+    # Because almost every service declares `depends_on: redis: condition:
+    # service_healthy`, that took the whole stack down and was the single
+    # biggest barrier to `docker compose up` working from a clean checkout.
+    #
+    # It is also inconsistent with the rest of this file, which hands every
+    # service `REDIS_URL: redis://redis:6379` — no credentials. Adding a
+    # password here without updating those URLs would just move the breakage.
+    #
+    # Redis is not published outside the compose network by any service that
+    # needs auth, so unauthenticated is the right default for local development.
+    # For production, set a password AND update every REDIS_URL to
+    # `redis://:<password>@redis:6379`. See docs/DEPLOY.md.
     command: >
       redis-server
       --maxmemory 512mb
       --maxmemory-policy allkeys-lru
       --appendonly yes
       --appendfsync everysec
-      --requirepass ${REDIS_PASSWORD:-}
     volumes:
       - redis_data:/data
     healthcheck:
@@ -504,7 +539,7 @@ services:
       # up automatically rather than needing a manual import.
       - ../grafana/dashboards:/var/lib/grafana/dashboards/collabspace:ro
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:3000/api/health"]
       interval: 15s
       timeout: 5s
       retries: 3

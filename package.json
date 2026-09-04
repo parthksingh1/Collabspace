@@ -20,9 +20,11 @@
     "clean": "turbo run clean && rm -rf node_modules",
     "db:migrate": "turbo run db:migrate --filter=@collabspace/doc-service --filter=@collabspace/code-service --filter=@collabspace/project-service --filter=@collabspace/auth-service",
     "db:seed": "turbo run db:seed",
-    "docker:build": "docker-compose -f infra/docker/docker-compose.yml build",
-    "docker:up": "docker-compose -f infra/docker/docker-compose.yml up -d",
-    "docker:down": "docker-compose -f infra/docker/docker-compose.yml down",
+    "db:seed:demo": "tsx scripts/seed-demo.ts",
+    "db:seed:demo:reset": "tsx scripts/seed-demo.ts --reset",
+    "docker:build": "docker compose -f infra/docker/docker-compose.yml --project-directory . --env-file .env build",
+    "docker:up": "docker compose -f infra/docker/docker-compose.yml --project-directory . --env-file .env up -d",
+    "docker:down": "docker compose -f infra/docker/docker-compose.yml --project-directory . --env-file .env down",
     "k8s:deploy": "kubectl apply -k infra/k8s/overlays/production",
     "load-test": "k6 run tests/load/scenarios.js",
     "bench:ws": "k6 run benchmarks/websocket-load.js",
@@ -31,7 +33,9 @@
     "bench:all": "npm run bench:ws && npm run bench:crdt && npm run bench:api",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "test:chaos:ws": "tsx --test tests/chaos/ws-node-failure.test.ts",
-    "test:chaos:redis": "tsx --test tests/chaos/redis-restart.test.ts"
+    "test:chaos:redis": "tsx --test tests/chaos/redis-restart.test.ts",
+    "docker:logs": "docker compose -f infra/docker/docker-compose.yml --project-directory . --env-file .env logs -f",
+    "docker:infra": "docker compose -f infra/docker/docker-compose.yml --project-directory . --env-file .env up -d postgres redis kafka zookeeper prometheus grafana jaeger"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
@@ -43,7 +47,11 @@
     "ws": "^8.16.0",
     "yjs": "^13.6.0",
     "@types/ws": "^8.5.10",
-    "@playwright/test": "^1.44.0"
+    "@playwright/test": "^1.44.0",
+    "pg": "^8.11.0",
+    "@types/pg": "^8.11.0",
+    "bcryptjs": "^2.4.3",
+    "@types/bcryptjs": "^2.4.6"
   },
   "engines": {
     "node": ">=20.0.0",
