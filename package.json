@@ -22,6 +22,10 @@
     "docker:down": "docker-compose -f infra/docker/docker-compose.yml down",
     "k8s:deploy": "kubectl apply -k infra/k8s/overlays/production",
     "load-test": "k6 run tests/load/scenarios.js",
+    "bench:ws": "k6 run benchmarks/websocket-load.js",
+    "bench:crdt": "tsx benchmarks/crdt-sync-latency.ts",
+    "bench:api": "k6 run benchmarks/api-throughput.js",
+    "bench:all": "npm run bench:ws && npm run bench:crdt && npm run bench:api",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
   },
   "devDependencies": {
@@ -29,7 +33,11 @@
     "eslint": "^8.56.0",
     "prettier": "^3.2.0",
     "turbo": "^2.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "tsx": "^4.7.0",
+    "ws": "^8.16.0",
+    "yjs": "^13.6.0",
+    "@types/ws": "^8.5.10"
   },
   "engines": {
     "node": ">=20.0.0",
