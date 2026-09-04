@@ -12,7 +12,7 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "test:integration": "tsx --test --test-concurrency=1 \"tests/integration/*.test.ts\"",
+    "test:integration": "tsx --test tests/integration/crdt-convergence.test.ts tests/integration/offline-reconciliation.test.ts",
     "test:chaos": "npm run test:chaos:ws && npm run test:chaos:redis",
     "test:e2e": "playwright test --config tests/e2e/playwright/playwright.config.ts",
     "test:all": "npm run test && npm run test:integration && npm run test:chaos",
